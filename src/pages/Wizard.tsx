@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom"; // 👈 1. IMPORT ADDED
 import {
   ArrowRight, Sparkles, Briefcase, DollarSign, Heart,
   Brain, Compass, Users, Plus, X, Zap, Ban,
@@ -95,6 +96,7 @@ const OBJECTIVE_SUGGESTIONS = [
 ];
 
 const Wizard = () => {
+  const navigate = useNavigate(); // 👈 2. HOOK INITIALIZED
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
 
@@ -140,6 +142,7 @@ const Wizard = () => {
     }
   };
 
+  // 👈 3. UPDATED SUBMIT FUNCTION
   const handleSubmit = () => {
     setIsSubmitting(true);
     const visionData = {
@@ -149,10 +152,14 @@ const Wizard = () => {
       goals: goals.filter(g => g.text.trim() !== ""),
       createdAt: new Date().toISOString()
     };
+    
     console.log('Vision Data:', visionData);
+    // In a real app, you would dispatch 'visionData' to your Context or API here.
+
     setTimeout(() => {
       setIsSubmitting(false);
-      alert('🎉 Blueprint Generated! Your 2026 vision is locked in.');
+      // Removed the alert()
+      navigate("/vision-board"); // Redirects to the result page
     }, 1500);
   };
 
