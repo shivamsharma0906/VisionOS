@@ -1,7 +1,8 @@
 // src/lib/api.ts
 import { VisionData } from '../types/vision'; 
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = "https://visionos-backend.onrender.com/api";
+
 
 // --- EXISTING FUNCTION ---
 export const saveVisionToBackend = async (data: VisionData) => {
