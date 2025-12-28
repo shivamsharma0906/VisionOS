@@ -9,7 +9,18 @@ import authRoutes from "./routes/auth.js";
 dotenv.config();
 
 const app = express();
-app.use(cors());
+
+// 👇 UPDATED CORS SETTINGS
+app.use(cors({
+  origin: [
+    "http://localhost:5173",                      // Vite Localhost
+    "http://localhost:8080",                      // Alternate Localhost
+    "https://shivamsharma0906.github.io"          // 🟢 YOUR GITHUB WEBSITE
+  ],
+  credentials: true,                              // Allow cookies/auth headers
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+}));
+
 app.use(express.json());
 
 // MongoDB connection
