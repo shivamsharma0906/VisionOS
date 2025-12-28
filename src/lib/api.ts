@@ -1,37 +1,68 @@
 // src/lib/api.ts
-import { VisionData } from '../types/vision'; 
+import { VisionData } from '../types/vision';
 
-const API_BASE = "https://visionos-backend.onrender.com/api";
+// Use local backend for development
+const API_BASE = "http://localhost:5000/api";
 
+// Helper to get the token from storage
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  return {
+    "Content-Type": "application/json",
+    "Authorization": token ? `Bearer ${token}` : "",
+  };
+};
 
-// --- EXISTING FUNCTION ---
+// --- VISION FUNCTIONS ---
+
+// 1. SAVE FUNCTION (Updated with Token)
 export const saveVisionToBackend = async (data: VisionData) => {
   try {
     const response = await fetch(`${API_BASE}/vision`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: getAuthHeaders(), // <--- Adds the token here!
       body: JSON.stringify(data),
     });
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || "Failed to save vision");
+      throw new Error(errorData.message || "Failed to save vision");
     }
 
     return await response.json();
   } catch (error) {
-    console.error("API Request Failed:", error);
+    console.error("Save API Error:", error);
     throw error;
   }
 };
 
-// --- NEW AUTH FUNCTIONS ---
+// 2. NEW FETCH FUNCTION (To load data on login)
+export const fetchVisionFromBackend = async () => {
+  try {
+    const response = await fetch(`${API_BASE}/vision`, {
+      method: "GET",
+      headers: getAuthHeaders(), // <--- Adds the token here!
+    });
+
+    if (!response.ok) {
+      // If 404, it just means new user has no data yet
+      if (response.status === 404) return null; 
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Failed to fetch vision");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Fetch API Error:", error);
+    throw error;
+  }
+};
+
+// --- AUTH FUNCTIONS ---
 
 export const registerUser = async (credentials: { email: string; password: string }) => {
   try {
-    const response = await fetch(`${API_BASE}/auth/register`, {
+    const response = await fetch(`${API_BASE}/auth/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(credentials),
@@ -39,7 +70,7 @@ export const registerUser = async (credentials: { email: string; password: strin
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || "Registration failed");
+      throw new Error(errorData.message || "Registration failed");
     }
     return await response.json();
   } catch (error) {
@@ -58,7 +89,7 @@ export const loginUser = async (credentials: { email: string; password: string }
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || "Login failed");
+      throw new Error(errorData.message || "Login failed");
     }
     return await response.json();
   } catch (error) {

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { VisionData, Goal } from '../types/vision'; 
-import { saveVisionToBackend } from '../lib/api'; // <--- IMPORT API HELPER
+import { saveVisionToBackend, fetchVisionFromBackend } from '../lib/api'; // <--- IMPORTED FETCH
 
 // Define the Interface for the Context
 interface VisionContextType {
@@ -10,7 +10,8 @@ interface VisionContextType {
   getSuggestions: () => Goal[];
   addSubTask: (goalId: number, taskText: string) => void;
   toggleSubTask: (goalId: number, taskIndex: number) => void;
-  save: () => Promise<void>; // <--- NEW SAVE FUNCTION TYPE
+  save: () => Promise<void>;
+  refresh: () => Promise<void>; // <--- NEW REFRESH FUNCTION
 }
 
 const VisionContext = createContext<VisionContextType | undefined>(undefined);
@@ -20,7 +21,7 @@ export function VisionProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<VisionData>(() => {
     const saved = localStorage.getItem('visionData');
     return saved ? JSON.parse(saved) : {
-      userId: "local-user", // <--- ENSURE USERID EXISTS FOR BACKEND
+      userId: "local-user",
       isGuest: true,
       lifeStage: '',
       streak: 5,
@@ -45,7 +46,32 @@ export function VisionProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('visionData', JSON.stringify(data));
   }, [data]);
 
+  // --- NEW: LOAD DATA FROM BACKEND ON STARTUP ---
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      refresh(); // If user is logged in, fetch their data immediately
+    }
+  }, []);
+
   // --- ACTIONS ---
+
+  // NEW: REFRESH FUNCTION (Call this after Login!)
+  const refresh = async () => {
+    try {
+      console.log("Fetching data from backend...");
+      const cloudData = await fetchVisionFromBackend();
+      
+      if (cloudData) {
+        // Update state with the data from the cloud
+        setData(cloudData);
+        console.log("Sync complete: Loaded data for", cloudData.userId);
+      }
+    } catch (error) {
+      console.error("Sync failed:", error);
+      // We don't throw here to avoid breaking the UI on load errors
+    }
+  };
 
   const updateData = <K extends keyof VisionData>(field: K, value: VisionData[K]) => {
     setData(prev => ({ ...prev, [field]: value }));
@@ -92,7 +118,6 @@ export function VisionProvider({ children }: { children: ReactNode }) {
     setData(prev => ({ ...prev, finalGoals: newGoals }));
   };
 
-  // --- NEW: SAVE TO BACKEND FUNCTION ---
   const save = async () => {
     try {
       console.log("Saving to backend...", data);
@@ -100,13 +125,13 @@ export function VisionProvider({ children }: { children: ReactNode }) {
       console.log("Save complete!");
     } catch (error) {
       console.error("Failed to save vision:", error);
-      throw error; // Re-throw so the UI component knows it failed
+      throw error;
     }
   };
 
   return (
     <VisionContext.Provider value={{ 
-      data, updateData, toggleArea, getSuggestions, addSubTask, toggleSubTask, save 
+      data, updateData, toggleArea, getSuggestions, addSubTask, toggleSubTask, save, refresh 
     }}>
       {children}
     </VisionContext.Provider>

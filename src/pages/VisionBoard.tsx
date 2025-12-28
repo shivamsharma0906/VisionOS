@@ -1,14 +1,60 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useVision } from "../context/VisionContext";
 import confetti from "canvas-confetti";
 import {
   Sparkles, Calendar as CalendarIcon,
   Check, Wallet, Plus, Trash2, X, 
-  Edit2, Download, Zap, MoreVertical, Flame,
+  Edit2, Zap, MoreVertical, Flame,
   ChevronLeft, ChevronRight, Quote, Play, Pause, RotateCcw, Maximize2,
-  Image as ImageIcon, Brain, Activity, Clock, Trophy, Link as LinkIcon, Target
+  Image as ImageIcon, Brain, Activity, Clock, Trophy, Link as LinkIcon, Target,
+  TrendingUp, Anchor, Wind, BarChart3, Save, Ban
 } from "lucide-react";
+
+// --- HELPER FUNCTIONS ---
+
+// FIX APPLIED HERE: Removed unused 'let income = 0' variable
+const parseIncomeString = (incomeStr: string): number => {
+  if (!incomeStr) return 0;
+  try {
+    const cleanStr = incomeStr.toString().toLowerCase();
+    const num = parseFloat(cleanStr.replace(/[^0-9.]/g, ''));
+    
+    if (isNaN(num)) return 0;
+    
+    if (cleanStr.includes('lakh') || cleanStr.includes('lac')) return num * 100000;
+    if (cleanStr.includes('cr') || cleanStr.includes('crore')) return num * 10000000;
+    if (cleanStr.includes('k')) return num * 1000;
+    
+    return num;
+  } catch (e) { return 0; }
+};
+
+const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
+
+const formatTime = (seconds: number) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+};
+
+const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 5) return "Good night";
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
+};
+
+const getYearProgress = () => {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 0);
+  const diff = now.getTime() - start.getTime();
+  const oneDay = 1000 * 60 * 60 * 24;
+  const day = Math.floor(diff / oneDay);
+  return Math.round((day / 365) * 100);
+};
 
 // --- COMPONENTS ---
 
@@ -32,106 +78,78 @@ const ProgressRing = ({ radius, stroke, progress, color }: { radius: number, str
   return (
     <div className="relative flex items-center justify-center">
       <svg height={radius * 2} width={radius * 2} className="rotate-[-90deg]">
-        <circle
-          stroke="rgba(255,255,255,0.1)"
-          strokeWidth={stroke}
-          fill="transparent"
-          r={normalizedRadius}
-          cx={radius}
-          cy={radius}
-        />
-        <circle
-          stroke={color}
-          strokeWidth={stroke}
-          strokeDasharray={circumference + ' ' + circumference}
-          style={{ strokeDashoffset, transition: 'stroke-dashoffset 1s ease-in-out' }}
-          strokeLinecap="round"
-          fill="transparent"
-          r={normalizedRadius}
-          cx={radius}
-          cy={radius}
-        />
+        <circle stroke="rgba(255,255,255,0.1)" strokeWidth={stroke} fill="transparent" r={normalizedRadius} cx={radius} cy={radius} />
+        <circle stroke={color} strokeWidth={stroke} strokeDasharray={circumference + ' ' + circumference} style={{ strokeDashoffset, transition: 'stroke-dashoffset 1s ease-in-out' }} strokeLinecap="round" fill="transparent" r={normalizedRadius} cx={radius} cy={radius} />
       </svg>
     </div>
   );
 };
 
-// --- HELPER FUNCTIONS ---
-const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
-const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
-
-const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 18) return "Good afternoon";
-    return "Good evening";
-};
-
-const getYearProgress = () => {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), 0, 0);
-  const diff = now.getTime() - start.getTime();
-  const oneDay = 1000 * 60 * 60 * 24;
-  const day = Math.floor(diff / oneDay);
-  return Math.round((day / 365) * 100);
-};
-
 // --- TYPES ---
-interface SubTask {
-  text: string;
-  done: boolean;
-}
-
-interface Goal {
-  id: number;
-  text: string;
-  type: string;
-  subTasks: SubTask[];
-}
-
-interface DailyTask {
-  id: number;
-  text: string;
-  done: boolean;
-  linkedGoalId?: number | null; 
-}
+interface SubTask { text: string; done: boolean; }
+interface Goal { id: number; text: string; type: string; subTasks: SubTask[]; }
+interface DailyTask { id: number; text: string; done: boolean; linkedGoalId?: number | null; }
 
 const VisionBoard = () => {
   const navigate = useNavigate();
   const { data, toggleSubTask } = useVision();
 
-  // --- 1. GOALS STATE (FIXED) ---
-  // We use "as Goal[]" to tell TypeScript to trust the structure coming from context
+  // --- STATE ---
+
+  // 1. Goals
   const [goals, setGoals] = useState<Goal[]>(() => (data.finalGoals as Goal[]) || []);
   const [isAddingGoal, setIsAddingGoal] = useState(false);
   const [newGoalText, setNewGoalText] = useState("");
 
-  // --- 2. DAILY RITUALS (With Goal Linking) ---
-  const [dailyTasks, setDailyTasks] = useState<DailyTask[]>([
-    { id: 1, text: "Morning Meditation (10m)", done: true, linkedGoalId: null },
-    { id: 2, text: "Deep Work Session (2h)", done: false, linkedGoalId: null },
-  ]);
+  // 2. Daily Rituals
+  const [dailyTasks, setDailyTasks] = useState<DailyTask[]>(() => {
+    const saved = localStorage.getItem("vision_dailies");
+    if (saved) return JSON.parse(saved);
+
+    const wizardHabit = data.answers?.['good_habit'];
+    const initialTasks = [
+      { id: 2, text: "Deep Work Session (2h)", done: false, linkedGoalId: null },
+    ];
+    
+    if (wizardHabit) {
+        initialTasks.unshift({ id: 1, text: wizardHabit, done: false, linkedGoalId: null });
+    } else {
+        initialTasks.unshift({ id: 1, text: "Morning Meditation (10m)", done: false, linkedGoalId: null });
+    }
+    return initialTasks;
+  });
+  
   const [newTaskInput, setNewTaskInput] = useState("");
   const [selectedGoalLink, setSelectedGoalLink] = useState<number | string>(""); 
   const [isAddingTask, setIsAddingTask] = useState(false);
 
-  // --- 3. OTHER STATE ---
-  const [lifeAge, setLifeAge] = useState(25); 
+  // 3. User Data
+  const [lifeAge, setLifeAge] = useState(() => {
+      const saved = localStorage.getItem('userAge');
+      return saved ? Number(saved) : 25;
+  });
   const [isEditingAge, setIsEditingAge] = useState(false);
-  const [heatmapData] = useState(() => Array.from({ length: 30 }, () => Math.floor(Math.random() * 80) + 10));
-  const [brainDump, setBrainDump] = useState(() => localStorage.getItem("vision_braindump") || "");
-  const [isSaved, setIsSaved] = useState(true);
-  const [xp, setXp] = useState(1250);
   
-  const [finance, setFinance] = useState({
-    currency: '₹',
-    monthlyIncome: 80000, 
-    monthlyBudget: 50000,
-    spentSoFar: 12450, 
+  // 4. Finance
+  const [finance, setFinance] = useState(() => {
+    const saved = localStorage.getItem("vision_finance");
+    if (saved) return JSON.parse(saved);
+
+    const income = parseIncomeString(data.answers?.['monthly_income'] || "80000");
+    const baseline = parseIncomeString(data.answers?.['current_savings'] || "0");
+
+    return {
+        currency: '₹',
+        monthlyIncome: income || 80000, 
+        monthlyBudget: (income || 80000) * 0.7,
+        spentSoFar: 0,
+        totalSavings: baseline 
+    };
   });
   const [isEditingFinance, setIsEditingFinance] = useState(false);
   const [tempFinance, setTempFinance] = useState(finance);
 
+  // 5. Calendar & Events
   const [currentDate, setCurrentDate] = useState(new Date()); 
   const [selectedDate, setSelectedDate] = useState<string | null>(null); 
   const [events, setEvents] = useState([
@@ -140,17 +158,32 @@ const VisionBoard = () => {
   ]);
   const [newEvent, setNewEvent] = useState({ title: "", type: "general" });
 
+  // 6. UI & Gamification
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [timer, setTimer] = useState(25 * 60); 
   const [isActive, setIsActive] = useState(false);
   const [isDreamVaultOpen, setIsDreamVaultOpen] = useState(false);
+  const [heatmapData] = useState(() => Array.from({ length: 30 }, () => Math.floor(Math.random() * 80) + 10));
+  const [brainDump, setBrainDump] = useState(() => localStorage.getItem("vision_braindump") || "");
+  const [isSaved, setIsSaved] = useState(true);
+  const [xp, setXp] = useState(() => Number(localStorage.getItem("vision_xp")) || 1250);
+  const [timelineTab, setTimelineTab] = useState<'now' | '1y' | '3y' | '5y'>('now');
 
-  // Derived Gamification
-  const level = Math.floor(xp / 1000);
-  const nextLevelXp = (level + 1) * 1000;
-  const xpProgress = ((xp % 1000) / 1000) * 100;
+  // New: Editing Projection
+  const [isEditingProjectionIncome, setIsEditingProjectionIncome] = useState(false);
+  const [tempProjectionIncome, setTempProjectionIncome] = useState(finance.monthlyIncome);
 
   // --- EFFECTS ---
+  useEffect(() => {
+    if (data.finalGoals && data.finalGoals.length > 0) {
+        setGoals(data.finalGoals as Goal[]);
+    }
+  }, [data.finalGoals]);
+
+  useEffect(() => { localStorage.setItem("vision_dailies", JSON.stringify(dailyTasks)); }, [dailyTasks]);
+  useEffect(() => { localStorage.setItem("vision_finance", JSON.stringify(finance)); }, [finance]);
+  useEffect(() => { localStorage.setItem("vision_xp", xp.toString()); }, [xp]);
+
   useEffect(() => {
     const handler = setTimeout(() => {
       localStorage.setItem("vision_braindump", brainDump);
@@ -159,37 +192,95 @@ const VisionBoard = () => {
     return () => clearTimeout(handler);
   }, [brainDump]);
 
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isActive && timer > 0) {
+      interval = setInterval(() => setTimer((prev) => prev - 1), 1000);
+    } else if (timer === 0 && isActive) {
+      setIsActive(false);
+      confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+      setXp(p => p + 100);
+    }
+    return () => clearInterval(interval);
+  }, [isActive, timer]);
+
+  // --- LOGIC: MOMENTUM & PROJECTION ---
+  const momentum = useMemo(() => {
+    const totalRituals = dailyTasks.length;
+    const completedRituals = dailyTasks.filter(t => t.done).length;
+    const ritualScore = totalRituals ? (completedRituals / totalRituals) * 100 : 0;
+
+    const totalSubtasks = goals.reduce((acc, g) => acc + (g.subTasks?.length || 0), 0);
+    const completedSubtasks = goals.reduce((acc, g) => acc + (g.subTasks?.filter(s => s.done).length || 0), 0);
+    const goalScore = totalSubtasks ? (completedSubtasks / totalSubtasks) * 100 : 0;
+
+    const xpScore = Math.min(100, (xp / 5000) * 100);
+
+    return Math.round((ritualScore * 0.4) + (goalScore * 0.4) + (xpScore * 0.2));
+  }, [dailyTasks, goals, xp]);
+
+  const getProjection = (period: 'now' | '1y' | '3y' | '5y') => {
+    let years = 0;
+    if (period === '1y') years = 1;
+    if (period === '3y') years = 3;
+    if (period === '5y') years = 5;
+
+    let status: 'High Growth' | 'Stable' | 'Drifting' = 'Stable';
+    let growthRate = 0.05; 
+    
+    // Adjusted Thresholds
+    if (momentum >= 20) { status = 'High Growth'; growthRate = 0.15; }
+    else if (momentum < 20) { status = 'Drifting'; growthRate = 0.05; }
+
+    // UPDATED: Calculate Annual Income (Monthly * 12)
+    const annualBase = finance.monthlyIncome * 12;
+    const projectedIncome = Math.round(annualBase * Math.pow((1 + growthRate), years));
+
+    let careerText = "Establishing foundations.";
+    let skillText = "Competent";
+    let healthText = "Maintained";
+    let narrative = "You are currently building your base.";
+
+    if (status === 'High Growth') {
+      if (years === 1) { careerText = "Rapid Acceleration"; skillText = "Specialist"; healthText = "Optimized"; narrative = "Your consistency is creating a compound effect. Opportunities are finding you."; }
+      if (years === 3) { careerText = "Market Leader"; skillText = "Expert"; healthText = "Peak Performance"; narrative = "You have separated yourself from the pack. Your systems run on autopilot."; }
+      if (years === 5) { careerText = "Industry Icon"; skillText = "Master"; healthText = "Ageless"; narrative = "You are living the vision you wrote down 5 years ago. Total freedom."; }
+    } else if (status === 'Stable') {
+      if (years >= 1) narrative = "Steady progress. You are moving forward, but there is room to accelerate.";
+    } else {
+      narrative = "Entropy is setting in. Re-align your daily actions to change this trajectory.";
+      healthText = "Declining";
+    }
+
+    if (period === 'now') {
+        careerText = "Current Role";
+        skillText = "Building";
+        healthText = "Baseline";
+        narrative = "Every action you take today writes the history of your future.";
+    }
+
+    return { status, projectedIncome, careerText, skillText, healthText, narrative, growthRate };
+  };
+
+  const projection = getProjection(timelineTab);
+  const level = Math.floor(xp / 1000);
+  const nextLevelXp = (level + 1) * 1000;
+  const xpProgress = ((xp % 1000) / 1000) * 100;
+
+  // --- HANDLERS ---
+
   const handleBrainDumpChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setIsSaved(false);
     setBrainDump(e.target.value);
   };
 
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isActive && timer > 0) {
-      interval = setInterval(() => {
-        setTimer((prev) => prev - 1);
-      }, 1000);
-    } else if (timer === 0) {
-      setIsActive(false);
-      confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-    }
-    return () => clearInterval(interval);
-  }, [isActive, timer]);
-
-  // --- HANDLERS ---
   const toggleTimer = () => setIsActive(!isActive);
   const resetTimer = () => { setIsActive(false); setTimer(25 * 60); };
   const adjustTimer = (minutes: number) => setTimer(prev => Math.max(60, prev + minutes * 60));
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
 
   const handleTaskToggle = (goalId: number, taskId: number) => {
     toggleSubTask(goalId, taskId);
-    setGoals(prevGoals => prevGoals.map(g => {
+    setGoals(prev => prev.map(g => {
         if (g.id === goalId) {
             const newSub = [...g.subTasks];
             newSub[taskId] = { ...newSub[taskId], done: !newSub[taskId].done };
@@ -212,15 +303,7 @@ const VisionBoard = () => {
 
   const addDailyTask = () => {
     if (newTaskInput.trim()) {
-      setDailyTasks([
-        ...dailyTasks, 
-        { 
-            id: Date.now(), 
-            text: newTaskInput, 
-            done: false,
-            linkedGoalId: selectedGoalLink ? Number(selectedGoalLink) : null
-        }
-      ]);
+      setDailyTasks([ ...dailyTasks, { id: Date.now(), text: newTaskInput, done: false, linkedGoalId: selectedGoalLink ? Number(selectedGoalLink) : null } ]);
       setNewTaskInput("");
       setSelectedGoalLink("");
       setIsAddingTask(false);
@@ -229,6 +312,15 @@ const VisionBoard = () => {
 
   const deleteDailyTask = (id: number) => setDailyTasks(prev => prev.filter(t => t.id !== id));
   const saveFinance = () => { setFinance(tempFinance); setIsEditingFinance(false); };
+  
+  // Save edited monthly base income
+  const saveProjectionIncome = () => {
+    const newFinance = { ...finance, monthlyIncome: tempProjectionIncome };
+    setFinance(newFinance);
+    localStorage.setItem("vision_finance", JSON.stringify(newFinance));
+    setIsEditingProjectionIncome(false);
+  };
+
   const getSavingsRate = () => Math.round(((finance.monthlyIncome - finance.spentSoFar) / finance.monthlyIncome) * 100);
 
   const handleAddGoal = () => {
@@ -237,10 +329,7 @@ const VisionBoard = () => {
       id: Date.now(),
       text: newGoalText,
       type: "Strategic",
-      subTasks: [
-        { text: "Define Phase 1", done: false },
-        { text: "First Milestone", done: false }
-      ]
+      subTasks: [ { text: "Define Phase 1", done: false }, { text: "First Milestone", done: false } ]
     };
     setGoals(prev => [...prev, newGoalObj]);
     setNewGoalText("");
@@ -267,8 +356,8 @@ const VisionBoard = () => {
   };
   const deleteEvent = (id: number) => setEvents(prev => prev.filter(e => e.id !== id));
   const hasEvent = (day: number) => {
-     const checkDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-     return events.some(e => e.date === checkDate);
+      const checkDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      return events.some(e => e.date === checkDate);
   };
   const currentMonthEvents = events.filter(e => {
     const [eYear, eMonth] = e.date.split('-');
@@ -278,52 +367,50 @@ const VisionBoard = () => {
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-purple-500/30 overflow-x-hidden relative">
 
-      {/* --- MODALS --- */}
-      
-      {/* Dream Vault */}
+      {/* --- MODALS (Dream Vault, Add Goal, Focus Mode) --- */}
       {isDreamVaultOpen && (
-        <div className="fixed inset-0 z-50 bg-[#050505]/95 backdrop-blur-xl flex flex-col items-center justify-center p-10 animate-in fade-in zoom-in-95">
-           <button onClick={() => setIsDreamVaultOpen(false)} className="absolute top-6 right-6 p-2 text-gray-500 hover:text-white"><X className="w-8 h-8" /></button>
-           <h2 className="text-3xl font-serif font-bold text-white mb-8">The Vault</h2>
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl w-full">
-              {["https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1540497077202-7c8a3999166f?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1553729459-efe14ef6055d?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=800"].map((src, i) => (
-                <div key={i} className="group relative aspect-video rounded-2xl overflow-hidden border border-white/10 hover:border-white/50 transition-all cursor-pointer">
-                   <img src={src} alt="Dream" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                   <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors" />
-                </div>
-              ))}
+        <div className="fixed inset-0 z-50 bg-[#050505]/95 backdrop-blur-xl flex flex-col items-center justify-center p-10 animate-in fade-in zoom-in-95" onClick={() => setIsDreamVaultOpen(false)}>
+           <div className="relative w-full max-w-5xl" onClick={e => e.stopPropagation()}>
+             <button onClick={() => setIsDreamVaultOpen(false)} className="absolute -top-12 right-0 p-2 text-gray-500 hover:text-white"><X className="w-8 h-8" /></button>
+             <h2 className="text-3xl font-serif font-bold text-white mb-8 text-center">The Vault</h2>
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {["https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1540497077202-7c8a3999166f?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1553729459-efe14ef6055d?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=800"].map((src, i) => (
+                  <div key={i} className="group relative aspect-video rounded-2xl overflow-hidden border border-white/10 hover:border-white/50 transition-all cursor-pointer">
+                      <img src={src} alt="Dream" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                      <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors" />
+                  </div>
+                ))}
+             </div>
            </div>
         </div>
       )}
 
-      {/* Add Goal Modal */}
       {isAddingGoal && (
-        <div className="fixed inset-0 z-50 bg-[#050505]/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
-           <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-3xl max-w-md w-full shadow-2xl relative">
-              <button onClick={() => setIsAddingGoal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X className="w-5 h-5" /></button>
-              <div className="flex items-center gap-3 mb-6">
-                 <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-400"><Target className="w-5 h-5" /></div>
-                 <h3 className="text-xl font-bold text-white">New Objective</h3>
-              </div>
-              <div className="space-y-4">
-                 <div>
-                    <label className="text-xs text-gray-500 uppercase font-bold ml-1 block mb-2">Goal Statement</label>
-                    <input 
-                       autoFocus
-                       value={newGoalText}
-                       onChange={(e) => setNewGoalText(e.target.value)}
-                       placeholder="e.g. Launch the SaaS MVP by Q3..."
-                       className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white placeholder:text-gray-600 focus:outline-none focus:border-purple-500 transition-colors"
-                       onKeyDown={(e) => e.key === 'Enter' && handleAddGoal()}
-                    />
-                 </div>
-                 <button onClick={handleAddGoal} className="w-full h-12 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl text-white font-bold hover:shadow-lg hover:shadow-purple-500/25 transition-all">Commit to Goal</button>
-              </div>
+        <div className="fixed inset-0 z-50 bg-[#050505]/80 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in" onClick={() => setIsAddingGoal(false)}>
+           <div className="bg-[#0a0a0a] border border-white/10 p-8 rounded-3xl max-w-md w-full shadow-2xl relative" onClick={e => e.stopPropagation()}>
+             <button onClick={() => setIsAddingGoal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X className="w-5 h-5" /></button>
+             <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-400"><Target className="w-5 h-5" /></div>
+                <h3 className="text-xl font-bold text-white">New Objective</h3>
+             </div>
+             <div className="space-y-4">
+                <div>
+                   <label className="text-xs text-gray-500 uppercase font-bold ml-1 block mb-2">Goal Statement</label>
+                   <input 
+                      autoFocus
+                      value={newGoalText}
+                      onChange={(e) => setNewGoalText(e.target.value)}
+                      placeholder="e.g. Launch the SaaS MVP by Q3..."
+                      className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white placeholder:text-gray-600 focus:outline-none focus:border-purple-500 transition-colors"
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddGoal()}
+                   />
+                </div>
+                <button onClick={handleAddGoal} className="w-full h-12 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl text-white font-bold hover:shadow-lg hover:shadow-purple-500/25 transition-all">Commit to Goal</button>
+             </div>
            </div>
         </div>
       )}
 
-      {/* Zen Focus Mode */}
       {isFocusMode && (
         <div className="fixed inset-0 z-50 bg-[#050505] flex flex-col items-center justify-center animate-in fade-in duration-500">
            <div className="absolute top-6 right-6">
@@ -384,12 +471,12 @@ const VisionBoard = () => {
            <h1 className="font-serif text-4xl md:text-5xl font-medium text-white mb-4">{getGreeting()}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-400">Shivam</span>.</h1>
            <div className="flex items-start gap-3 max-w-2xl">
               <Quote className="w-5 h-5 text-gray-600 shrink-0 mt-1 rotate-180" />
-              <p className="text-lg text-gray-400 font-light leading-relaxed">"Ambition is the path to success. Persistence is the vehicle you arrive in. Build with focus today."</p>
+              <p className="text-lg text-gray-400 font-light leading-relaxed">"{data.visionStatement || "Ambition is the path to success. Persistence is the vehicle you arrive in. Build with focus today."}"</p>
            </div>
         </div>
 
         {/* --- ANALYTICS DECK --- */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-16">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
            <div className="bg-[#0a0a0a] border border-white/5 rounded-3xl p-6 flex flex-col justify-between">
               <div>
                  <div className="flex items-center gap-2 mb-4 text-gray-400"><Clock className="w-4 h-4" /><span className="text-xs font-bold uppercase tracking-wider">Time</span></div>
@@ -435,6 +522,114 @@ const VisionBoard = () => {
            </div>
         </div>
 
+        {/* --- FUTURE TIMELINE FEATURE --- */}
+        <div className="mb-16 animate-in slide-in-from-bottom-8 duration-700 delay-200">
+          <div className="bg-[#0a0a0a] border border-white/5 rounded-3xl p-8 relative overflow-hidden group">
+            <div className={`absolute -top-[50%] -right-[10%] w-[50%] h-[100%] rounded-full blur-[120px] transition-colors duration-1000 opacity-20 ${projection.status === 'High Growth' ? 'bg-emerald-600' : projection.status === 'Stable' ? 'bg-indigo-600' : 'bg-yellow-600'}`} />
+            
+            <div className="relative z-10">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                <div>
+                  <h2 className="font-serif text-2xl font-bold text-white mb-2 flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-gray-400" /> Future Projection
+                  </h2>
+                  <p className="text-gray-500 text-sm">Based on your current momentum of <span className="font-bold text-white">{momentum}%</span></p>
+                </div>
+
+                <div className="flex bg-white/5 rounded-full p-1 border border-white/5">
+                  {(['now', '1y', '3y', '5y'] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setTimelineTab(tab)}
+                      className={`px-6 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-300 ${timelineTab === tab ? 'bg-white text-black shadow-lg scale-105' : 'text-gray-500 hover:text-white'}`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                
+                <div className={`p-5 rounded-2xl border border-white/5 bg-white/5 flex flex-col items-start justify-between min-h-[140px] transition-all duration-500 ${projection.status === 'High Growth' ? 'shadow-[0_0_20px_rgba(16,185,129,0.15)] border-emerald-500/30' : projection.status === 'Stable' ? 'border-indigo-500/30' : 'border-yellow-500/30'}`}>
+                  <div className="flex justify-between w-full">
+                    <span className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">Trajectory</span>
+                    {projection.status === 'High Growth' ? <TrendingUp className="w-4 h-4 text-emerald-400" /> : projection.status === 'Stable' ? <Anchor className="w-4 h-4 text-indigo-400" /> : <Wind className="w-4 h-4 text-yellow-400" />}
+                  </div>
+                  <div>
+                    <div className={`text-xl font-bold mb-1 ${projection.status === 'High Growth' ? 'text-emerald-400' : projection.status === 'Stable' ? 'text-indigo-400' : 'text-yellow-400'}`}>{projection.status}</div>
+                    <div className="text-xs text-gray-500 leading-tight">Compounding rate: +{Math.round(projection.growthRate * 100)}%</div>
+                  </div>
+                </div>
+
+                <div className="p-5 rounded-2xl border border-white/5 bg-white/5 flex flex-col justify-between min-h-[140px] relative group/income">
+                  <div className="flex justify-between w-full">
+                    <span className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">Annual Projection</span>
+                    <button 
+                        onClick={() => setIsEditingProjectionIncome(!isEditingProjectionIncome)} 
+                        className="text-gray-600 hover:text-white transition-colors"
+                    >
+                        {isEditingProjectionIncome ? <X className="w-4 h-4" /> : <Edit2 className="w-3 h-3" />}
+                    </button>
+                  </div>
+                  
+                  {isEditingProjectionIncome ? (
+                      <div className="mt-2 animate-in fade-in slide-in-from-bottom-1">
+                          <label className="text-[9px] text-gray-500 uppercase">Monthly Base</label>
+                          <input 
+                              type="number" 
+                              autoFocus
+                              value={tempProjectionIncome} 
+                              onChange={(e) => setTempProjectionIncome(Number(e.target.value))} 
+                              className="w-full bg-white/10 border border-white/20 rounded px-2 py-1 text-lg text-white outline-none mb-2"
+                          />
+                          <button 
+                              onClick={saveProjectionIncome}
+                              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold uppercase py-1.5 rounded transition-colors flex items-center justify-center gap-1"
+                          >
+                              <Save className="w-3 h-3" /> Save
+                          </button>
+                      </div>
+                  ) : (
+                      <div>
+                        <div className="text-2xl font-mono text-white mb-1 tracking-tight">{finance.currency}{projection.projectedIncome.toLocaleString()}</div>
+                        <div className="h-1 w-full bg-white/10 rounded-full mt-2 overflow-hidden">
+                          {/* Progress bar relative to double current income */}
+                          <div className="h-full bg-white transition-all duration-1000" style={{ width: `${Math.min(100, (projection.projectedIncome / ((finance.monthlyIncome * 12) * 2)) * 100)}%` }} />
+                        </div>
+                      </div>
+                  )}
+                </div>
+
+                <div className="p-5 rounded-2xl border border-white/5 bg-white/5 flex flex-col justify-between min-h-[140px] space-y-4">
+                   <div>
+                      <div className="text-[10px] text-gray-400 uppercase font-bold tracking-widest mb-1">Career Phase</div>
+                      <div className="text-sm font-bold text-white">{projection.careerText}</div>
+                   </div>
+                   <div className="flex items-center gap-3 pt-3 border-t border-white/10">
+                      <div className="flex-1">
+                          <div className="text-[9px] text-gray-500 uppercase mb-1">Skill Depth</div>
+                          <div className="text-xs text-indigo-300 font-medium">{projection.skillText}</div>
+                      </div>
+                      <div className="w-[1px] h-6 bg-white/10" />
+                      <div className="flex-1">
+                          <div className="text-[9px] text-gray-500 uppercase mb-1">Vitality</div>
+                          <div className="text-xs text-emerald-300 font-medium">{projection.healthText}</div>
+                      </div>
+                   </div>
+                </div>
+
+                <div className="p-6 rounded-2xl border border-white/5 bg-gradient-to-br from-white/5 to-transparent flex items-center">
+                   <p className="text-sm text-gray-300 leading-relaxed font-light italic">
+                     "{projection.narrative}"
+                   </p>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* --- WIDGETS LAYOUT --- */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
           {/* HABITS */}
@@ -451,7 +646,6 @@ const VisionBoard = () => {
                        
                        <div className="flex flex-col">
                           <span className={`text-sm font-medium transition-colors ${task.done ? 'text-green-500/50 line-through' : 'text-gray-300'}`}>{task.text}</span>
-                          {/* GOAL LINK TAG */}
                           {task.linkedGoalId && (
                              <div className="flex items-center gap-1 mt-0.5">
                                 <div className={`w-1.5 h-1.5 rounded-full ${goals.find(g => g.id === task.linkedGoalId)?.type === 'Strategic' ? 'bg-purple-500' : 'bg-indigo-500'}`} />
@@ -467,20 +661,13 @@ const VisionBoard = () => {
                {isAddingTask ? (
                  <div className="space-y-2 mt-2 animate-in fade-in slide-in-from-top-1 bg-white/5 p-3 rounded-xl border border-white/10">
                    <input autoFocus className="w-full bg-transparent border-b border-white/20 py-2 text-sm text-white focus:outline-none focus:border-purple-500 transition-colors" placeholder="New ritual..." value={newTaskInput} onChange={(e) => setNewTaskInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addDailyTask()} />
-                   
-                   {/* GOAL LINK SELECTOR */}
                    <div className="flex items-center gap-2">
                       <LinkIcon className="w-3 h-3 text-gray-500" />
-                      <select 
-                        className="bg-transparent text-[10px] text-gray-400 outline-none border-none cursor-pointer w-full"
-                        value={selectedGoalLink}
-                        onChange={(e) => setSelectedGoalLink(e.target.value)}
-                      >
-                         <option value="">Link to Goal (Optional)</option>
-                         {goals.map(g => <option key={g.id} value={g.id} className="bg-slate-900 text-gray-300">{g.text.substring(0, 25)}...</option>)}
+                      <select className="bg-transparent text-[10px] text-gray-400 outline-none border-none cursor-pointer w-full" value={selectedGoalLink} onChange={(e) => setSelectedGoalLink(e.target.value)}>
+                          <option value="">Link to Goal (Optional)</option>
+                          {goals.map(g => <option key={g.id} value={g.id} className="bg-slate-900 text-gray-300">{g.text.substring(0, 25)}...</option>)}
                       </select>
                    </div>
-
                    <button onClick={addDailyTask} className="w-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 rounded-lg transition-colors">Add Task</button>
                  </div>
                ) : (
@@ -499,7 +686,18 @@ const VisionBoard = () => {
              {isEditingFinance ? (
                 <div className="space-y-4 relative z-10"><div className="grid grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[10px] text-gray-500 uppercase">Income</label><input type="number" value={tempFinance.monthlyIncome} onChange={(e) => setTempFinance({...tempFinance, monthlyIncome: Number(e.target.value)})} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-emerald-500 outline-none" /></div><div className="space-y-1"><label className="text-[10px] text-gray-500 uppercase">Spent</label><input type="number" value={tempFinance.spentSoFar} onChange={(e) => setTempFinance({...tempFinance, spentSoFar: Number(e.target.value)})} className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-emerald-500 outline-none" /></div></div><button onClick={saveFinance} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded-lg text-xs font-bold uppercase tracking-wide transition-colors">Update Metrics</button></div>
              ) : (
-                <div className="flex items-center justify-between relative z-10"><div><div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Available</div><div className="text-3xl font-mono font-medium text-white tracking-tight">{finance.currency}{(finance.monthlyIncome - finance.spentSoFar).toLocaleString()}</div><div className="mt-4 flex items-center gap-2 text-xs text-gray-400"><span className="w-2 h-2 rounded-full bg-emerald-500" /><span>Savings Rate: <span className="text-white font-mono">{getSavingsRate()}%</span></span></div></div><div className="relative"><ProgressRing radius={45} stroke={6} progress={getSavingsRate()} color="#10B981" /><div className="absolute inset-0 flex items-center justify-center"><Zap className="w-5 h-5 text-emerald-500 fill-emerald-500" /></div></div></div>
+                <div className="flex items-center justify-between relative z-10">
+                    <div>
+                        <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Available</div>
+                        <div className="text-3xl font-mono font-medium text-white tracking-tight">{finance.currency}{(finance.monthlyIncome - finance.spentSoFar).toLocaleString()}</div>
+                        <div className="mt-4 flex items-center gap-2 text-xs text-gray-400">
+                            {/* NEW: Total Savings Display */}
+                            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                            <span>Total Savings: <span className="text-white font-mono">{finance.currency}{finance.totalSavings?.toLocaleString() || 0}</span></span>
+                        </div>
+                    </div>
+                    <div className="relative"><ProgressRing radius={45} stroke={6} progress={getSavingsRate()} color="#10B981" /><div className="absolute inset-0 flex items-center justify-center"><Zap className="w-5 h-5 text-emerald-500 fill-emerald-500" /></div></div>
+                </div>
              )}
              <div className="mt-8 pt-4 border-t border-white/5 relative z-10"><div className="flex justify-between text-[10px] uppercase text-gray-500 mb-2"><span>Monthly Burn</span><span>{Math.round((finance.spentSoFar / finance.monthlyIncome) * 100)}%</span></div><div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.5)]" style={{ width: `${(finance.spentSoFar / finance.monthlyIncome) * 100}%` }} /></div></div>
           </div>
@@ -532,21 +730,21 @@ const VisionBoard = () => {
                     <div className="flex justify-between items-start mb-6"><span className="text-[10px] font-mono text-gray-600 uppercase border border-white/5 px-2 py-1 rounded">OBJ-{idx + 1}</span><MoreVertical className="w-4 h-4 text-gray-600 cursor-pointer hover:text-white" /></div>
                     <h3 className="text-xl font-medium text-white mb-8 min-h-[3.5rem] leading-relaxed group-hover:text-indigo-300 transition-colors">{goal.text}</h3>
                     {(() => {
-                        const total = goal.subTasks?.length || 0;
-                        const completed = goal.subTasks?.filter((t: { done: boolean }) => t.done).length || 0;
-                        const percent = total === 0 ? 0 : Math.round((completed / total) * 100);
-                        return (
-                           <div>
-                              <div className="flex justify-between text-xs text-gray-500 mb-2 uppercase tracking-wider font-bold"><span>Progress</span><span className="text-white">{percent}%</span></div>
-                              <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden mb-6"><div className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 shadow-[0_0_10px_rgba(99,102,241,0.5)] transition-all duration-1000" style={{ width: `${percent}%` }} /></div>
-                              <div className="space-y-3">
+                       const total = goal.subTasks?.length || 0;
+                       const completed = goal.subTasks?.filter((t: { done: boolean }) => t.done).length || 0;
+                       const percent = total === 0 ? 0 : Math.round((completed / total) * 100);
+                       return (
+                          <div>
+                             <div className="flex justify-between text-xs text-gray-500 mb-2 uppercase tracking-wider font-bold"><span>Progress</span><span className="text-white">{percent}%</span></div>
+                             <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden mb-6"><div className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 shadow-[0_0_10px_rgba(99,102,241,0.5)] transition-all duration-1000" style={{ width: `${percent}%` }} /></div>
+                             <div className="space-y-3">
                                  {goal.subTasks?.slice(0, 2).map((task, i) => (
                                     <div key={i} onClick={() => handleTaskToggle(goal.id, i)} className="flex items-center gap-3 cursor-pointer group/task">
                                        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all duration-300 ${task.done ? 'bg-indigo-600 border-indigo-600' : 'border-white/20 bg-transparent group-hover/task:border-indigo-500'}`}>{task.done && <Check className="w-3 h-3 text-white" />}</div>
                                        <span className={`text-sm ${task.done ? 'text-gray-600 line-through' : 'text-gray-300'}`}>{task.text}</span>
                                     </div>
                                  ))}
-                              </div>
+                             </div>
                            </div>
                         );
                     })()}
@@ -557,6 +755,20 @@ const VisionBoard = () => {
               <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center group-hover:scale-110 transition-transform duration-300"><Plus className="w-6 h-6" /></div><span className="text-sm font-bold uppercase tracking-wider">Initialize Objective</span>
            </button>
         </div>
+
+        {/* --- ANTI-HABIT ALERT (NEW) --- */}
+        {data.answers?.['bad_habit'] && (
+            <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-4 duration-1000">
+                <div className="bg-red-500/10 border border-red-500/20 backdrop-blur-md text-red-200 px-4 py-3 rounded-xl flex items-center gap-3 shadow-lg">
+                    <div className="p-2 bg-red-500/20 rounded-full"><Ban className="w-4 h-4 text-red-400" /></div>
+                    <div>
+                        <div className="text-[10px] uppercase font-bold tracking-wider opacity-70">Anti-Vision Alert</div>
+                        <div className="text-sm font-medium">Avoid: <span className="text-white">{data.answers['bad_habit']}</span></div>
+                    </div>
+                    <button onClick={(e) => e.currentTarget.parentElement?.remove()} className="ml-2 hover:text-white"><X className="w-4 h-4" /></button>
+                </div>
+            </div>
+        )}
 
       </main>
     </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useVision } from "../context/VisionContext"; 
 import {
   ArrowRight, Sparkles, Briefcase, DollarSign, Heart,
   Brain, Compass, Users, Plus, X, Ban,
@@ -52,6 +53,23 @@ const VITAL_QUESTIONS = [
       "₹10 Lakhs/Month (Wealth)"
     ]
   },
+  
+  // --- NEW: ADDED THIS BLOCK FOR SAVINGS ---
+  {
+    id: 'current_savings',
+    label: 'Financial Baseline',
+    sub: 'How much do you currently have saved/invested?',
+    icon: <DollarSign className="w-5 h-5 text-blue-400" />,
+    placeholder: 'e.g. ₹5,00,000',
+    presets: [
+      "₹10,000 (Starting)",
+      "₹1 Lakh (Safety Net)",
+      "₹5 Lakhs (Builder)",
+      "₹10 Lakhs+ (Compounder)"
+    ]
+  },
+  // ------------------------------------------
+
   {
     id: 'good_habit',
     label: 'The Non-Negotiable',
@@ -97,14 +115,18 @@ const OBJECTIVE_SUGGESTIONS = [
 
 const Wizard = () => {
   const navigate = useNavigate();
+  const { updateData, save } = useVision();
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
 
   // --- FORM STATE ---
   const [lifeStage, setLifeStage] = useState("");
-  const [selectedAreas, setSelectedAreas] = useState([]);
+  const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
   const [goals, setGoals] = useState([{ id: 1, text: "" }]);
-  const [answers, setAnswers] = useState({});
+  
+  // Explicitly type answers as a Record of strings
+  const [answers, setAnswers] = useState<Record<string, string>>({});
 
   // --- HANDLERS ---
   const handleScroll = () => {
@@ -118,8 +140,11 @@ const Wizard = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const handleAnswerChange = (id, value) => setAnswers(prev => ({ ...prev, [id]: value }));
-  const toggleArea = (id) => {
+  const handleAnswerChange = (id: string, value: string) => {
+    setAnswers((prev) => ({ ...prev, [id]: value }));
+  };
+
+  const toggleArea = (id: string) => {
     if (selectedAreas.includes(id)) {
       setSelectedAreas(prev => prev.filter(a => a !== id));
     } else if (selectedAreas.length < 3) {
@@ -130,10 +155,10 @@ const Wizard = () => {
   const addGoalField = () => {
     if (goals.length < 5) setGoals([...goals, { id: Date.now(), text: "" }]);
   };
-  const updateGoal = (id, text) => setGoals(goals.map(g => g.id === id ? { ...g, text } : g));
-  const removeGoal = (id) => { if (goals.length > 1) setGoals(goals.filter(g => g.id !== id)); };
+  const updateGoal = (id: number, text: string) => setGoals(goals.map(g => g.id === id ? { ...g, text } : g));
+  const removeGoal = (id: number) => { if (goals.length > 1) setGoals(goals.filter(g => g.id !== id)); };
 
-  const addPresetGoal = (text) => {
+  const addPresetGoal = (text: string) => {
     const emptyGoal = goals.find(g => g.text.trim() === "");
     if (emptyGoal) {
       updateGoal(emptyGoal.id, text);
@@ -142,22 +167,43 @@ const Wizard = () => {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setIsSubmitting(true);
-    const visionData = {
-      lifeStage,
-      areas: selectedAreas,
-      answers,
-      goals: goals.filter(g => g.text.trim() !== ""),
-      createdAt: new Date().toISOString()
-    };
     
-    console.log('Vision Data:', visionData);
+    try {
+      // Sync State to Context
+      updateData('lifeStage', lifeStage);
+      updateData('areas', selectedAreas);
+      // Save all answers (including income and savings) to context
+      updateData('answers', answers);
+      
+      if (answers['big_goal']) {
+        updateData('visionStatement', answers['big_goal']);
+      }
 
-    setTimeout(() => {
-      setIsSubmitting(false);
+      const formattedGoals = goals
+        .filter(g => g.text.trim() !== "")
+        .map(g => ({
+           id: g.id,
+           text: g.text,
+           type: "Realistic" as const,
+           subTasks: []
+        }));
+      
+      updateData('finalGoals', formattedGoals);
+
+      console.log("Saving wizard data to backend...");
+      await save();
+      
+      console.log("Save successful! Redirecting...");
       navigate("/vision-board");
-    }, 1500);
+
+    } catch (error) {
+      console.error("Wizard Save Error:", error);
+      alert("Failed to save blueprint. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Calculate completion
@@ -177,12 +223,10 @@ const Wizard = () => {
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-indigo-500/30 selection:text-indigo-200 pb-32 relative">
 
       {/* --- BACKGROUND FX --- */}
-      {/* Grid Pattern */}
       <div className="fixed inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none -z-10" />
-      {/* Glows */}
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none -z-10" />
 
-      {/* Progress Bar - Gradient */}
+      {/* Progress Bar */}
       <div className="fixed top-0 left-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 z-[60] transition-all duration-300 shadow-[0_0_10px_rgba(139,92,246,0.5)]"
         style={{ width: `${scrollProgress * 100}%` }} />
 

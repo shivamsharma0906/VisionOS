@@ -8,7 +8,7 @@ const router = express.Router();
 // Signup route
 router.post("/signup", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, phone, age } = req.body;
 
     // Validate input
     if (!email || !password) {
@@ -28,6 +28,8 @@ router.post("/signup", async (req, res) => {
     const user = new User({
       email,
       password: hashedPassword,
+      phone,
+      age,
     });
 
     await user.save();
@@ -42,7 +44,12 @@ router.post("/signup", async (req, res) => {
     res.status(201).json({
       message: "Account created successfully",
       token,
-      user: { id: user._id, email: user.email },
+      user: { 
+        id: user._id, 
+        email: user.email, 
+        age: user.age, 
+        phone: user.phone 
+      },
     });
   } catch (error) {
     console.error("Signup error:", error);
@@ -73,10 +80,33 @@ router.post("/login", async (req, res) => {
 
     res.json({
       token,
-      user: { id: user._id, email: user.email },
+      user: { 
+        id: user._id, 
+        email: user.email, 
+        age: user.age, 
+        phone: user.phone 
+      },
     });
   } catch (error) {
     console.error("Login error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// --- NEW DELETE ROUTE ---
+// Usage: Send a DELETE or GET request to http://localhost:5000/api/auth/delete/user@email.com
+router.use("/delete/:email", async (req, res) => {
+  try {
+    const { email } = req.params;
+    const deletedUser = await User.findOneAndDelete({ email });
+    
+    if (!deletedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    
+    res.json({ message: `Successfully deleted user: ${email}` });
+  } catch (error) {
+    console.error("Delete error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
