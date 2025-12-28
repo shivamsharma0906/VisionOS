@@ -5,16 +5,19 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  // 👇 1. THIS IS THE FIX. It must be at the top level.
+  // If building for production (GitHub), use /VisionOS/. If dev (Localhost), use /.
+  base: mode === "production" ? "/VisionOS/" : "/",
+
   server: {
     host: "::",
-    port: 8080, // Your frontend runs on this port
+    port: 8080,
     proxy: {
-      // This forwards any request starting with /api to your backend
       "/api": {
         target: "http://localhost:5000",
         changeOrigin: true,
         secure: false,
-        base: "/VisionOS",
+        // Removed incorrect 'base' property from here
       },
     },
   },
@@ -23,7 +26,6 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      
     },
   },
 }));
