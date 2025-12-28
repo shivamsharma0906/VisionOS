@@ -1,8 +1,10 @@
 // src/lib/api.ts
 import { VisionData } from '../types/vision';
 
-// Use local backend for development
-const API_BASE = "http://localhost:5000/api";
+// 👇 THIS IS THE FIX
+// It checks your .env files first. If found, it uses that. If not, it falls back to localhost.
+const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_BASE = `${BACKEND_URL}/api`;
 
 // Helper to get the token from storage
 const getAuthHeaders = () => {
