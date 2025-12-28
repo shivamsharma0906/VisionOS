@@ -10,7 +10,7 @@ import { VisionProvider } from "@/context/VisionContext";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Wizard from "./pages/Wizard";
-import VisionSummary from "./pages/VisionSummary"; // 🟢 1. Import this
+import VisionSummary from "./pages/VisionSummary";
 import VisionBoard from "./pages/VisionBoard";
 import WeeklyCheckin from "./pages/WeeklyCheckin";
 import NotFound from "./pages/NotFound";
@@ -25,7 +25,8 @@ const App = () => (
       <VisionProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
+        {/* 👇 ADD basename="/VisionOS" HERE 👇 */}
+        <BrowserRouter basename="/VisionOS">
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
