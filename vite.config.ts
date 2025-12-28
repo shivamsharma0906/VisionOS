@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => ({
         target: "http://localhost:5000",
         changeOrigin: true,
         secure: false,
+        base: "/VisionOS",
       },
     },
   },
@@ -22,6 +23,7 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      
     },
   },
 }));

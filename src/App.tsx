@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { VisionProvider } from "@/context/VisionContext";
 
-
 // Pages
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
@@ -19,36 +18,46 @@ import WeeklyAIReview from "./pages/WeeklyAIReview";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <VisionProvider>
-        <Toaster />
-        <Sonner />
-        {/* 👇 ADD basename="/VisionOS" HERE 👇 */}
-        <BrowserRouter basename="/VisionOS">
-          <Routes>
-            <Route path="/" element={<Landing />} />
-            <Route path="/login" element={<Login />} />
+const App = () => {
+  // 1. Check if we are in development mode (localhost)
+  // If you are using Vite, 'import.meta.env.DEV' is automatically true locally
+  const isDev = import.meta.env.DEV;
 
-            {/* User Journey */}
-            <Route path="/wizard/*" element={<Wizard />} />
-            <Route path="/summary" element={<VisionSummary />} />
-            <Route path="/vision-board" element={<VisionBoard />} />
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <VisionProvider>
+          <Toaster />
+          <Sonner />
+          
+          {/* 2. Conditionally set the basename */}
+          {/* Localhost uses '/' */}
+          {/* GitHub Pages uses '/VisionOS' */}
+          <BrowserRouter basename={isDev ? "/" : "/VisionOS"}>
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route path="/login" element={<Login />} />
 
-            {/* Weekly */}
-            <Route path="/weekly-checkin" element={<WeeklyCheckin />} />
-            <Route path="/weekly-ai-review" element={<WeeklyAIReview />} />
+              {/* User Journey */}
+              <Route path="/wizard/*" element={<Wizard />} />
+              <Route path="/summary" element={<VisionSummary />} />
+              <Route path="/vision-board" element={<VisionBoard />} />
 
-            {/* AI Coach (on-demand) */}
-            <Route path="/ai-coach" element={<AICoach />} />
+              {/* Weekly */}
+              <Route path="/weekly-checkin" element={<WeeklyCheckin />} />
+              <Route path="/weekly-ai-review" element={<WeeklyAIReview />} />
 
-            {/* Fallback */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </VisionProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+              {/* AI Coach (on-demand) */}
+              <Route path="/ai-coach" element={<AICoach />} />
+
+              {/* Fallback */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </VisionProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
+
 export default App;
