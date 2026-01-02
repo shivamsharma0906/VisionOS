@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { VisionData, Goal } from '../types/vision'; 
+import { VisionData, Goal } from '../types/vision';
 import { saveVisionToBackend, fetchVisionFromBackend } from '../lib/api'; // <--- IMPORTED FETCH
 
 // Define the Interface for the Context
@@ -11,7 +11,8 @@ interface VisionContextType {
   addSubTask: (goalId: number, taskText: string) => void;
   toggleSubTask: (goalId: number, taskIndex: number) => void;
   save: () => Promise<void>;
-  refresh: () => Promise<void>; // <--- NEW REFRESH FUNCTION
+  saveWithData: (overrides: Partial<VisionData>) => Promise<void>; // <--- ATOMIC SAVE
+  refresh: () => Promise<void>;
 }
 
 const VisionContext = createContext<VisionContextType | undefined>(undefined);
@@ -28,14 +29,14 @@ export function VisionProvider({ children }: { children: ReactNode }) {
       areas: [],
       visionStatement: '',
       finalGoals: [
-        { 
-          id: 1, 
-          text: "Launch MVP in 30 Days", 
-          type: "Realistic", 
+        {
+          id: 1,
+          text: "Launch MVP in 30 Days",
+          type: "Realistic",
           subTasks: [
             { text: "Design Database Schema", done: true },
             { text: "Build React Frontend", done: false }
-          ] 
+          ]
         }
       ]
     };
@@ -61,7 +62,7 @@ export function VisionProvider({ children }: { children: ReactNode }) {
     try {
       console.log("Fetching data from backend...");
       const cloudData = await fetchVisionFromBackend();
-      
+
       if (cloudData) {
         // Update state with the data from the cloud
         setData(cloudData);
@@ -92,7 +93,7 @@ export function VisionProvider({ children }: { children: ReactNode }) {
     if (data.areas.includes('Career')) suggestions.push({ id: 101, text: "Complete 2 Portfolio Projects", type: "Realistic", subTasks: [] });
     if (data.areas.includes('Income')) suggestions.push({ id: 102, text: "Reach ₹50k Monthly Income", type: "Stretch", subTasks: [] });
     if (data.areas.includes('Health')) suggestions.push({ id: 103, text: "Workout 4x per Week", type: "Realistic", subTasks: [] });
-    if(suggestions.length === 0) suggestions.push({ id: 999, text: "Plan your first week", type: "Realistic", subTasks: [] });
+    if (suggestions.length === 0) suggestions.push({ id: 999, text: "Plan your first week", type: "Realistic", subTasks: [] });
     return suggestions;
   };
 
@@ -119,9 +120,17 @@ export function VisionProvider({ children }: { children: ReactNode }) {
   };
 
   const save = async () => {
+    await saveWithData({});
+  };
+
+  // ATOMIC SAVE: Merges new data, updates state, and saves to backend in one go
+  const saveWithData = async (overrides: Partial<VisionData>) => {
     try {
-      console.log("Saving to backend...", data);
-      await saveVisionToBackend(data);
+      const newData = { ...data, ...overrides };
+      setData(newData); // Optimistic UI update
+
+      console.log("Saving to backend...", newData);
+      await saveVisionToBackend(newData);
       console.log("Save complete!");
     } catch (error) {
       console.error("Failed to save vision:", error);
@@ -130,8 +139,8 @@ export function VisionProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <VisionContext.Provider value={{ 
-      data, updateData, toggleArea, getSuggestions, addSubTask, toggleSubTask, save, refresh 
+    <VisionContext.Provider value={{
+      data, updateData, toggleArea, getSuggestions, addSubTask, toggleSubTask, save, saveWithData, refresh
     }}>
       {children}
     </VisionContext.Provider>

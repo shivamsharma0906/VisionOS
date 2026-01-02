@@ -1,538 +1,535 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { useVision } from "../context/VisionContext"; 
+import React, { useState, useEffect, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useVision } from "../context/VisionContext";
 import {
-  ArrowRight, Sparkles, Briefcase, DollarSign, Heart,
-  Brain, Compass, Users, Plus, X, Ban,
-  Target, Crown, TrendingUp, Anchor, Activity, MousePointerClick,
-  Lightbulb, CheckCircle2, Zap, Rocket
+  Terminal, Layers, Shield, Rocket,
+  ChevronRight, X, Sparkles, CheckCircle2,
+  Cpu, Activity, Loader2
 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ThemeToggle } from "../components/ThemeToggle";
 
-// --- CONSTANTS ---
-const LIFE_STAGES = [
-  { id: 'Builder', label: 'The Builder', icon: <Anchor className="w-6 h-6" />, desc: 'Laying foundations. Focused on stability & systems.' },
-  { id: 'Scaler', label: 'The Scaler', icon: <TrendingUp className="w-6 h-6" />, desc: 'Growing rapidly. Focused on leverage & speed.' },
-  { id: 'Leader', label: 'The Leader', icon: <Crown className="w-6 h-6" />, desc: 'Guiding others. Focused on vision & culture.' },
-  { id: 'Monk', label: 'The Monk', icon: <Activity className="w-6 h-6" />, desc: 'Deep focus. Prioritizing peace & mastery.' },
+// --- THEME DATA ---
+const OPERATOR_CLASSES = [
+  { id: 'Architect', label: 'The Architect', icon: Layers, desc: 'Designing systems & foundations', color: 'text-blue-400' },
+  { id: 'Hacker', label: 'The Hacker', icon: Terminal, desc: 'Rapid iteration & problem solving', color: 'text-cyan-400' },
+  { id: 'Scaler', label: 'The Scaler', icon: Activity, desc: 'Optimizing for growth & leverage', color: 'text-purple-400' },
+  { id: 'Admin', label: 'The Admin', icon: Shield, desc: 'Governance & stability control', color: 'text-orange-400' },
 ];
 
-const AREAS = [
-  { id: 'Career', icon: <Briefcase className="w-5 h-5" /> },
-  { id: 'Wealth', icon: <DollarSign className="w-5 h-5" /> },
-  { id: 'Vitality', icon: <Heart className="w-5 h-5" /> },
-  { id: 'Mastery', icon: <Brain className="w-5 h-5" /> },
-  { id: 'Adventure', icon: <Compass className="w-5 h-5" /> },
-  { id: 'Family', icon: <Users className="w-5 h-5" /> },
+const PACKAGES = [
+  { id: 'Career', label: 'Career & Business', desc: 'Professional Growth' },
+  { id: 'Wealth', label: 'Wealth & Finance', desc: 'Financial Freedom' },
+  { id: 'Vitality', label: 'Health & Vitality', desc: 'Physical Energy' },
+  { id: 'Mastery', label: 'Mind & Mastery', desc: 'Skill Acquisition' },
+  { id: 'Family', label: 'Relationships', desc: 'Network & Bonds' },
+  { id: 'Adventure', label: 'Experiences', desc: 'Travel & Fun' },
 ];
 
-const VITAL_QUESTIONS = [
+// SUGGESTIONS DATA
+const INCOME_SUGGESTIONS = ["1,00,000", "3,00,000", "5,00,000", "10,00,000"];
+const SAVINGS_SUGGESTIONS = ["50,000", "200,000", "1,00,000", "5,00,000"];
+const GOAL_SUGGESTIONS = ["Build a SaaS Product", "Buy a Dream Home", "Run a Marathon", "Read 50 Books"];
+const HABIT_SUGGESTIONS = ["05:00 AM Gym", "Read 30 Mins", "Deep Work 4h", "Meditation"];
+
+const ENV_VARS = [
   {
     id: 'big_goal',
-    label: 'The North Star',
-    sub: 'One major outcome that makes everything else easier.',
-    icon: <Target className="w-5 h-5 text-indigo-400" />,
-    placeholder: 'e.g. Build a ₹10 Cr Business',
-    presets: [
-      "Build a ₹1 Cr/Year Business",
-      "Buy a Home for Parents",
-      "Clear UPSC / CAT Exam",
-      "Retire by Age 40",
-      "Travel to 10 Countries"
-    ]
+    key: 'NORTH_STAR',
+    label: 'Primary Objective',
+    placeholder: 'e.g. Build a SaaS Empire',
+    type: 'string',
+    suggestions: GOAL_SUGGESTIONS
   },
   {
     id: 'monthly_income',
-    label: 'Financial Fuel',
-    sub: 'The monthly net income required to fund your ideal lifestyle.',
-    icon: <DollarSign className="w-5 h-5 text-emerald-400" />,
-    placeholder: 'e.g. ₹1.5 Lakh/Month',
-    presets: [
-      "₹50,000 (Starter)",
-      "₹1 Lakh/Month (Freedom)",
-      "₹3 Lakhs/Month (Comfort)",
-      "₹10 Lakhs/Month (Wealth)"
-    ]
+    key: 'TARGET_INCOME',
+    label: 'Monthly Target (₹)',
+    placeholder: 'e.g. 5,00,000',
+    type: 'text',
+    suggestions: INCOME_SUGGESTIONS
   },
-  
-  // --- NEW: ADDED THIS BLOCK FOR SAVINGS ---
   {
     id: 'current_savings',
-    label: 'Financial Baseline',
-    sub: 'How much do you currently have saved/invested?',
-    icon: <DollarSign className="w-5 h-5 text-blue-400" />,
-    placeholder: 'e.g. ₹5,00,000',
-    presets: [
-      "₹10,000 (Starting)",
-      "₹1 Lakh (Safety Net)",
-      "₹5 Lakhs (Builder)",
-      "₹10 Lakhs+ (Compounder)"
-    ]
-  },
-  // ------------------------------------------
-
-  {
-    id: 'good_habit',
-    label: 'The Non-Negotiable',
-    sub: 'The one daily protocol that guarantees your success.',
-    icon: <Zap className="w-5 h-5 text-yellow-400" />,
-    placeholder: 'e.g. 1 hour of Yoga/Gym',
-    presets: [
-      "Wake up at 5 AM",
-      "Daily Gym/Yoga",
-      "Read 10 Pages",
-      "Invest 20% of Salary",
-      "4 Hours Deep Work"
-    ]
-  },
-  {
-    id: 'bad_habit',
-    label: 'The Anchor',
-    sub: 'The single biggest distraction holding you back right now.',
-    icon: <Ban className="w-5 h-5 text-red-400" />,
-    placeholder: 'e.g. Scrolling Instagram Reels',
-    presets: [
-      "Doomscrolling Reels/Shorts",
-      "Ordering Food Daily",
-      "Procrastination",
-      "Oversleeping",
-      "Sugar Addiction"
-    ]
+    key: 'SAFETY_NET',
+    label: 'Current Savings (₹)',
+    placeholder: 'e.g. 1,00,000',
+    type: 'text',
+    suggestions: SAVINGS_SUGGESTIONS
   },
 ];
 
-const OBJECTIVE_SUGGESTIONS = [
-  "Build Emergency Fund (₹5L)",
-  "Launch Side Hustle",
-  "Get Promoted",
-  "Run Half Marathon",
-  "Read 24 Books",
-  "Take Parents on Trip",
-  "Start YouTube Channel",
-  "Pay off Loan",
-  "Learn New Language",
-  "Meditate 100 Days"
+const PROTOCOLS = [
+  {
+    id: 'good_habit',
+    key: 'DAILY_PROTOCOL',
+    label: 'Keystone Habit',
+    placeholder: 'e.g. 05:00 Gym Session',
+    comment: 'High priority action',
+    suggestions: HABIT_SUGGESTIONS
+  },
+  {
+    id: 'bad_habit',
+    key: 'RESTRICTION',
+    label: 'Anti-Habit',
+    placeholder: 'e.g. Doomscrolling',
+    comment: 'Avoid at all costs',
+    suggestions: ["No Social Media < 12PM", "No Junk Food", "Limit Screen Time"]
+  },
+];
+
+const MILESTONE_SUGGESTIONS = [
+  "Launch MVP",
+  "Get First 10 Customers",
+  "Run 5km without stopping",
+  "Read 12 books this year",
+  "Save ₹1 Lakh",
+  "Create a YouTube Channel"
 ];
 
 const Wizard = () => {
   const navigate = useNavigate();
-  const { updateData, save } = useVision();
-  
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [scrollProgress, setScrollProgress] = useState(0);
+  const [searchParams] = useSearchParams();
+  const { saveWithData } = useVision(); // Updated destructuring
+  const [step, setStep] = useState(0);
+  const [bootSequence, setBootSequence] = useState(true);
+  const [logs, setLogs] = useState<string[]>([]);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   // --- FORM STATE ---
-  const [lifeStage, setLifeStage] = useState("");
-  const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
-  const [goals, setGoals] = useState([{ id: 1, text: "" }]);
-  
-  // Explicitly type answers as a Record of strings
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [operatorClass, setOperatorClass] = useState("");
+  const [dependencies, setDependencies] = useState<string[]>([]);
+  const [envVars, setEnvVars] = useState<Record<string, string>>({});
+  const [features, setFeatures] = useState([{ id: 1, text: "" }]);
+  const [isDeploying, setIsDeploying] = useState(false);
 
-  // --- HANDLERS ---
-  const handleScroll = () => {
-    const totalScroll = document.documentElement.scrollTop;
-    const windowHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
-    setScrollProgress(Number(totalScroll / windowHeight));
-  };
+  // --- PARSE URL PARAMS ---
+  useEffect(() => {
+    const focus = searchParams.get('focus');
+    if (focus) {
+      // Find matching package
+      const pkg = PACKAGES.find(p => p.id.toLowerCase() === focus.toLowerCase());
+      if (pkg) {
+        setBootSequence(false);
+        setStep(2); // Jump to Dependencies
+        setDependencies(prev => prev.includes(pkg.id) ? prev : [...prev, pkg.id]);
+        addLog(`Focus Mode: ${pkg.label} initialized.`);
+      }
+    }
+  }, [searchParams]);
+
+  // --- BOOT SEQUENCE EFFECT ---
+  useEffect(() => {
+    if (bootSequence) {
+      const sequence = [
+        "Initializing VisionOS...",
+        "Loading system modules...",
+        "Calibrating user preferences...",
+        "Ready."
+      ];
+      let i = 0;
+      const interval = setInterval(() => {
+        setLogs(prev => [...prev, `> ${sequence[i]}`]);
+        i++;
+        if (i >= sequence.length) {
+          clearInterval(interval);
+          setTimeout(() => {
+            setBootSequence(false);
+            setStep(1);
+          }, 800);
+        }
+      }, 600);
+      return () => clearInterval(interval);
+    }
+  }, [bootSequence]);
 
   useEffect(() => {
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs, step]);
 
-  const handleAnswerChange = (id: string, value: string) => {
-    setAnswers((prev) => ({ ...prev, [id]: value }));
+  // --- HANDLERS ---
+  const addLog = (msg: string) => setLogs(prev => [...prev, `${new Date().toLocaleTimeString()} ${msg}`]);
+
+  const handleNext = () => {
+    addLog(`Step ${step} confirmed.`);
+    setStep(s => s + 1);
   };
 
-  const toggleArea = (id: string) => {
-    if (selectedAreas.includes(id)) {
-      setSelectedAreas(prev => prev.filter(a => a !== id));
-    } else if (selectedAreas.length < 3) {
-      setSelectedAreas(prev => [...prev, id]);
+  const toggleDependency = (id: string, label: string) => {
+    if (dependencies.includes(id)) {
+      setDependencies(prev => prev.filter(d => d !== id));
+      addLog(`Removed module: ${label}`);
+    } else if (dependencies.length < 3) {
+      setDependencies(prev => [...prev, id]);
+      addLog(`Added module: ${label}`);
+    } else {
+      addLog(`Limit reached (Max 3 areas)`);
     }
   };
 
-  const addGoalField = () => {
-    if (goals.length < 5) setGoals([...goals, { id: Date.now(), text: "" }]);
-  };
-  const updateGoal = (id: number, text: string) => setGoals(goals.map(g => g.id === id ? { ...g, text } : g));
-  const removeGoal = (id: number) => { if (goals.length > 1) setGoals(goals.filter(g => g.id !== id)); };
-
-  const addPresetGoal = (text: string) => {
-    const emptyGoal = goals.find(g => g.text.trim() === "");
-    if (emptyGoal) {
-      updateGoal(emptyGoal.id, text);
-    } else if (goals.length < 5) {
-      setGoals([...goals, { id: Date.now(), text }]);
-    }
+  const handleEnvChange = (id: string, val: string) => {
+    setEnvVars(prev => ({ ...prev, [id]: val }));
   };
 
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
-    
+  const handleFeatureChange = (id: number, val: string) => {
+    setFeatures(prev => prev.map(f => f.id === id ? { ...f, text: val } : f));
+  };
+
+  const addFeature = (text: string) => {
+    // Only prevent if the LAST feature is empty, to allow filling previous ones
+    const lastFeature = features[features.length - 1];
+    if (lastFeature && lastFeature.text.trim() === "" && text === "") return;
+
+    if (features.length >= 5) return;
+    setFeatures(prev => [...prev, { id: Date.now(), text }]);
+  };
+
+  const handleDeploy = async () => {
+    setIsDeploying(true);
+    addLog("Compiling Blueprint...");
+
     try {
-      // Sync State to Context
-      updateData('lifeStage', lifeStage);
-      updateData('areas', selectedAreas);
-      // Save all answers (including income and savings) to context
-      updateData('answers', answers);
-      
-      if (answers['big_goal']) {
-        updateData('visionStatement', answers['big_goal']);
-      }
-
-      const formattedGoals = goals
+      // 1. Construct Complete Data Object
+      const formattedGoals = features
         .filter(g => g.text.trim() !== "")
         .map(g => ({
-           id: g.id,
-           text: g.text,
-           type: "Realistic" as const,
-           subTasks: []
+          id: g.id,
+          text: g.text,
+          type: "Realistic" as const,
+          subTasks: []
         }));
-      
-      updateData('finalGoals', formattedGoals);
 
-      console.log("Saving wizard data to backend...");
-      await save();
-      
-      console.log("Save successful! Redirecting...");
-      navigate("/vision-board");
+      // Sanitize numeric fields (remove commas) before saving
+      const cleanAnswers = { ...envVars };
+      ['monthly_income', 'current_savings'].forEach(key => {
+        if (cleanAnswers[key]) {
+          cleanAnswers[key] = cleanAnswers[key].replace(/,/g, '');
+        }
+      });
 
-    } catch (error) {
-      console.error("Wizard Save Error:", error);
-      alert("Failed to save blueprint. Please try again.");
-    } finally {
-      setIsSubmitting(false);
+      // 2. Atomic Save (Updates State & Backend synchronously)
+      await saveWithData({
+        lifeStage: operatorClass,
+        areas: dependencies,
+        answers: cleanAnswers,
+        visionStatement: envVars['big_goal'] || '',
+        finalGoals: formattedGoals
+      });
+
+      addLog("Configuration Saved.");
+      addLog("Setup Complete. Launching Dashboard...");
+
+      // Allow user to see the success message briefly
+      setTimeout(() => navigate('/vision-board'), 1500);
+
+    } catch (e) {
+      console.error(e);
+      addLog("Error: Connection Failed");
+      setIsDeploying(false);
     }
   };
 
-  // Calculate completion
-  const getCompletionPercentage = () => {
-    let score = 0;
-    if (lifeStage) score += 25;
-    if (selectedAreas.length > 0) score += 25;
-    if (Object.keys(answers).length >= 3) score += 25;
-    if (goals.filter(g => g.text.trim()).length >= 1) score += 25;
-    return score;
-  };
-
-  const isValid = lifeStage && selectedAreas.length > 0 && goals[0].text.length > 0 && Object.keys(answers).length >= 3;
-  const completionScore = getCompletionPercentage();
-
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-indigo-500/30 selection:text-indigo-200 pb-32 relative">
-
-      {/* --- BACKGROUND FX --- */}
-      <div className="fixed inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none -z-10" />
-      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none -z-10" />
-
-      {/* Progress Bar */}
-      <div className="fixed top-0 left-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 z-[60] transition-all duration-300 shadow-[0_0_10px_rgba(139,92,246,0.5)]"
-        style={{ width: `${scrollProgress * 100}%` }} />
-
-      {/* HEADER */}
-      <header className="sticky top-0 z-50 bg-slate-950/70 backdrop-blur-xl border-b border-white/10">
-        <div className="container mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-             <div className="w-8 h-8 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <Sparkles className="w-4 h-4 text-white" />
+  // --- RENDER CONTENT ---
+  const renderContent = () => {
+    switch (step) {
+      case 1: // CLASS SELECTION
+        return (
+          <div className="space-y-6 animate-in slide-in-from-bottom-4 fade-in duration-500">
+            <div className="font-mono text-cyan-400 mb-4 flex items-center gap-2">
+              <span className="text-yellow-400">Step 1:</span> Initialize Identity
             </div>
-            <div>
-              <span className="block text-sm font-bold tracking-tight text-white">VisionOS</span>
-              <span className="block text-[10px] text-slate-400 font-medium">Strategic Blueprint 2026</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-white/10">
-              <div className={`w-2 h-2 rounded-full ${completionScore === 100 ? 'bg-emerald-400 animate-pulse' : 'bg-indigo-500'}`} />
-              <span className="text-xs font-medium text-slate-300">{completionScore}% Ready</span>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="container mx-auto px-6 max-w-4xl pt-16 relative z-10">
-
-        {/* Hero Section */}
-        <div className="mb-20 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs font-medium uppercase tracking-wider mb-6 shadow-sm">
-            <Rocket className="w-3 h-3" />
-            <span>Setup Wizard</span>
-          </div>
-
-          <h1 className="font-serif text-5xl md:text-7xl font-bold tracking-tight text-white mb-6 leading-tight">
-            Design Your
-            <span className="block mt-2 text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400">
-              Legendary 2026
-            </span>
-          </h1>
-
-          <p className="text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed font-normal">
-            Four powerful questions. One transformative vision. <br />
-            Let's build your blueprint for the year ahead.
-          </p>
-        </div>
-
-        {/* --- STEP 1: IDENTITY --- */}
-        <section className="mb-24">
-          <div className="text-center mb-10">
-            <h2 className="font-serif text-3xl font-bold mb-3 text-white">
-              Choose Your Operator Mode
-            </h2>
-            <p className="text-slate-400 text-base">What defines your primary focus this year?</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {LIFE_STAGES.map((stage) => (
-              <div
-                key={stage.id}
-                onClick={() => setLifeStage(stage.id)}
-                className={`cursor-pointer relative p-6 rounded-2xl border transition-all duration-300 group ${lifeStage === stage.id
-                    ? "border-indigo-500 bg-indigo-600/10 shadow-[0_0_30px_rgba(99,102,241,0.15)]"
-                    : "border-white/10 bg-white/5 hover:border-indigo-500/50 hover:bg-white/10"
-                  }`}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className={`p-3 rounded-xl transition-all ${lifeStage === stage.id ? "bg-indigo-500 text-white" : "bg-slate-800 text-slate-400 group-hover:text-indigo-400"
-                    }`}>
-                    {stage.icon}
-                  </div>
-                  {lifeStage === stage.id && (
-                    <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center">
-                      <CheckCircle2 className="w-4 h-4 text-white" />
-                    </div>
-                  )}
-                </div>
-                <h3 className={`font-serif text-xl font-bold mb-2 ${lifeStage === stage.id ? "text-white" : "text-slate-200"}`}>
-                  {stage.label}
-                </h3>
-                <p className={`text-sm leading-relaxed ${lifeStage === stage.id ? "text-indigo-200" : "text-slate-500"}`}>
-                  {stage.desc}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* --- STEP 2: FOCUS --- */}
-        <section className="mb-24">
-          <div className="text-center mb-10">
-            <h2 className="font-serif text-3xl font-bold mb-3 text-white">
-              Select Focus Areas
-            </h2>
-            <p className="text-slate-400 text-base mb-4">Choose up to 3 domains for maximum impact</p>
-            <div className={`inline-block px-3 py-1 rounded-md text-sm font-bold ${selectedAreas.length === 3 ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-800 text-slate-400"}`}>
-              {selectedAreas.length}/3 selected
-            </div>
-          </div>
-
-          <div className="flex flex-wrap justify-center gap-4">
-            {AREAS.map((area) => {
-              const isActive = selectedAreas.includes(area.id);
-              const isDisabled = !isActive && selectedAreas.length >= 3;
-              return (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {OPERATOR_CLASSES.map((cls) => (
                 <button
-                  key={area.id}
-                  onClick={() => toggleArea(area.id)}
-                  disabled={isDisabled}
-                  className={`h-14 px-6 rounded-xl border flex items-center gap-3 font-medium text-sm transition-all duration-300 ${isActive
-                      ? "bg-gradient-to-r from-indigo-600 to-purple-600 border-transparent text-white shadow-lg shadow-indigo-500/20 scale-105"
-                      : isDisabled
-                        ? "bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed opacity-50"
-                        : "bg-slate-900/50 border-white/10 text-slate-300 hover:border-indigo-400 hover:bg-slate-800 hover:text-white"
-                    }`}
-                >
-                  {area.icon}
-                  {area.id}
-                </button>
-              )
-            })}
-          </div>
-        </section>
-
-        {/* --- STEP 3: VITAL QUESTIONS --- */}
-        <section className="mb-24">
-          <div className="text-center mb-12">
-            <h2 className="font-serif text-3xl font-bold mb-3 text-white">
-              Define Your Vital Metrics
-            </h2>
-            <p className="text-slate-400 text-base">Click presets or write your own • Answer at least 3</p>
-          </div>
-
-          <div className="space-y-6">
-            {VITAL_QUESTIONS.map((q, idx) => (
-              <div key={q.id} className="group bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl overflow-hidden hover:border-indigo-500/30 transition-all duration-300">
-                <div className="flex flex-col md:flex-row">
-                  {/* Icon Section */}
-                  <div className="hidden md:flex w-20 items-center justify-center bg-slate-900/30 border-r border-white/5">
-                    <div className="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center">
-                      {q.icon}
-                    </div>
-                  </div>
-
-                  {/* Content Section */}
-                  <div className="flex-1 p-6 md:p-8">
-                    <div className="flex items-start justify-between mb-6">
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider bg-indigo-500/10 px-2 py-0.5 rounded">METRIC {idx + 1}</span>
-                        </div>
-                        <label className="text-xl font-bold text-white block mb-1">
-                          {q.label}
-                        </label>
-                        <p className="text-sm text-slate-400">{q.sub}</p>
-                      </div>
-                      {answers[q.id] && (
-                        <CheckCircle2 className="w-6 h-6 text-emerald-500 animate-in zoom-in" />
-                      )}
-                    </div>
-
-                    <input
-                      type="text"
-                      placeholder={q.placeholder}
-                      value={answers[q.id] || ""}
-                      onChange={(e) => handleAnswerChange(q.id, e.target.value)}
-                      className="w-full h-14 px-5 border border-white/10 text-lg text-white placeholder:text-slate-600 bg-slate-950/50 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 rounded-xl transition-all outline-none"
-                    />
-
-                    {/* Presets */}
-                    <div className="mt-6">
-                      <div className="flex items-center gap-2 mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                        <MousePointerClick className="w-3 h-3" /> Quick Select
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {q.presets.map((preset) => (
-                          <button
-                            key={preset}
-                            onClick={() => handleAnswerChange(q.id, preset)}
-                            className="px-4 py-2 rounded-lg bg-white/5 border border-white/5 text-xs font-medium text-slate-300 hover:bg-indigo-600 hover:border-indigo-600 hover:text-white transition-all active:scale-95"
-                          >
-                            {preset}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* --- STEP 4: GOALS --- */}
-        <section className="mb-32">
-          <div className="bg-gradient-to-br from-slate-900 to-slate-950 rounded-3xl p-8 md:p-10 border border-white/10 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-
-            <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 relative z-10">
-              <div>
-                <h3 className="font-serif text-2xl md:text-3xl font-bold text-white mb-2">Your Strategic Goals</h3>
-                <p className="text-slate-400 text-sm">Add 1-5 concrete objectives for 2026</p>
-              </div>
-              <button
-                onClick={addGoalField}
-                disabled={goals.length >= 5}
-                className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-500 hover:scale-110 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-lg shadow-indigo-600/20"
-              >
-                <Plus className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Goal Inputs */}
-            <div className="space-y-4 mb-8 relative z-10">
-              {goals.map((goal, index) => (
-                <div key={goal.id} className="flex gap-4 items-center group animate-in slide-in-from-bottom-2 fade-in duration-300">
-                  <div className="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 border border-white/5 flex items-center justify-center font-bold text-sm">
-                    {index + 1}
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Define a clear, measurable objective..."
-                    value={goal.text}
-                    onChange={(e) => updateGoal(goal.id, e.target.value)}
-                    className="flex-1 h-12 px-4 bg-slate-950/50 border border-white/10 text-white placeholder:text-slate-600 rounded-xl focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all outline-none"
-                  />
-                  {goals.length > 1 && (
-                    <button
-                      onClick={() => removeGoal(goal.id)}
-                      className="w-8 h-8 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                    >
-                      <X className="w-4 h-4 mx-auto" />
-                    </button>
+                  key={cls.id}
+                  onClick={() => { setOperatorClass(cls.id); addLog(`Identity selected: ${cls.label}`); }}
+                  className={cn(
+                    "group relative p-5 rounded-2xl border text-left transition-all duration-300 glass-button",
+                    operatorClass === cls.id
+                      ? "border-cyan-500 shadow-[0_0_20px_rgba(99,102,241,0.3)] bg-indigo-500/20"
+                      : "hover:border-white/20 hover:bg-white/10"
                   )}
-                </div>
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className={cn("p-2 rounded-lg bg-white/5", cls.color)}>
+                      <cls.icon className="w-5 h-5" />
+                    </div>
+                    <span className="font-bold text-foreground text-lg">{cls.label}</span>
+                    {operatorClass === cls.id && <CheckCircle2 className="w-5 h-5 text-cyan-400 ml-auto" />}
+                  </div>
+                  <div className="text-sm text-muted-foreground pl-[3.25rem]">
+                    {cls.desc}
+                  </div>
+                </button>
               ))}
             </div>
+          </div>
+        );
 
-            {/* Goal Suggestions */}
-            <div className="border-t border-white/10 pt-8 relative z-10">
-              <div className="flex items-center gap-2 mb-4">
-                <Lightbulb className="w-4 h-4 text-yellow-400" />
-                <span className="text-sm font-bold text-slate-300">Popular Ideas</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {OBJECTIVE_SUGGESTIONS.map((suggestion) => (
+      case 2: // DEPENDENCIES
+        return (
+          <div className="space-y-6 animate-in slide-in-from-bottom-4 fade-in duration-500">
+            <div className="font-mono text-cyan-400 mb-4 flex items-center gap-2">
+              <span className="text-yellow-400">Step 2:</span> Select Focus Areas <span className="text-muted-foreground text-xs ml-2">(Max 3)</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {PACKAGES.map((pkg) => {
+                const isSelected = dependencies.includes(pkg.id);
+                return (
                   <button
-                    key={suggestion}
-                    onClick={() => addPresetGoal(suggestion)}
-                    className="px-3 py-2 rounded-lg border border-dashed border-slate-700 text-xs font-medium text-slate-400 hover:border-indigo-500 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all"
+                    key={pkg.id}
+                    onClick={() => toggleDependency(pkg.id, pkg.label)}
+                    disabled={!isSelected && dependencies.length >= 3}
+                    className={cn(
+                      "flex items-center justify-between p-4 rounded-xl border font-medium text-sm transition-all duration-200 glass-button",
+                      isSelected
+                        ? "bg-emerald-500/10 border-emerald-500/50 text-cyan-400 shadow-glow"
+                        : "text-muted-foreground hover:border-white/20 hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed"
+                    )}
                   >
-                    + {suggestion}
+                    <span className="text-base">{pkg.label}</span>
+                    <span className="text-[10px] bg-white/5 border border-white/5 px-2 py-0.5 rounded text-muted-foreground">{pkg.desc}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+
+      case 3: // ENV VARS
+        return (
+          <div className="space-y-8 animate-in slide-in-from-bottom-4 fade-in duration-500">
+            <div className="font-mono text-cyan-400 mb-4 flex items-center gap-2">
+              <span className="text-yellow-400">Step 3:</span> Configuration & Metrics
+            </div>
+
+            {ENV_VARS.map((env) => (
+              <div key={env.id} className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-bold text-foreground flex items-center gap-2">
+                    {env.label}
+                    <span className="text-[10px] font-mono text-muted-foreground bg-white/5 px-1.5 rounded">{env.key}</span>
+                  </label>
+                </div>
+
+                <div className="relative group">
+                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500/50 rounded-l-md group-focus-within:bg-indigo-400 transition-colors" />
+                  <input
+                    autoFocus={env.id === 'big_goal'}
+                    type={env.type}
+                    value={envVars[env.id] || ''}
+                    onChange={(e) => handleEnvChange(env.id, e.target.value)}
+                    placeholder={env.placeholder}
+                    className="w-full glass-card border rounded-r-md py-3 px-4 text-foreground focus:outline-none focus:border-cyan-500/50 transition-colors placeholder:text-muted-foreground"
+                  />
+                </div>
+
+                {/* Suggestions */}
+                <div className="flex flex-wrap gap-2">
+                  {env.suggestions.map(sugg => (
+                    <button
+                      key={sugg}
+                      onClick={() => handleEnvChange(env.id, sugg)}
+                      className="text-[10px] px-2 py-1 rounded glass-button text-muted-foreground transition-colors"
+                    >
+                      {sugg}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+
+      case 4: // PROTOCOLS
+        return (
+          <div className="space-y-8 animate-in slide-in-from-bottom-4 fade-in duration-500">
+            <div className="font-mono text-cyan-400 mb-4 flex items-center gap-2">
+              <span className="text-yellow-400">Step 4:</span> Define Protocols
+            </div>
+
+            {PROTOCOLS.map((proto) => (
+              <div key={proto.id} className="space-y-3 p-5 rounded-2xl glass-card">
+                <div className="flex justify-between items-center text-xs font-mono text-muted-foreground mb-1">
+                  <span className="text-foreground font-bold uppercase tracking-wider">{proto.label}</span>
+                  <span>{proto.comment}</span>
+                </div>
+                <div className="flex gap-2 text-sm font-mono items-center">
+                  <ChevronRight className="w-4 h-4 text-emerald-500" />
+                  <input
+                    value={envVars[proto.id] || ''}
+                    onChange={(e) => handleEnvChange(proto.id, e.target.value)}
+                    placeholder={proto.placeholder}
+                    className="flex-1 bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground h-8"
+                  />
+                </div>
+                {/* Suggestions */}
+                <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-white/5">
+                  {proto.suggestions.map(sugg => (
+                    <button
+                      key={sugg}
+                      onClick={() => handleEnvChange(proto.id, sugg)}
+                      className="text-[10px] px-2 py-1 rounded glass-button text-muted-foreground transition-colors"
+                    >
+                      + {sugg}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+
+      case 5: // RELEASE FEATURES
+        return (
+          <div className="space-y-6 animate-in slide-in-from-bottom-4 fade-in duration-500">
+            <div className="font-mono text-cyan-400 mb-4 flex items-center gap-2">
+              <span className="text-yellow-400">Step 5:</span> Set Strategic Milestones
+            </div>
+
+            <div className="glass-card rounded-2xl overflow-hidden shadow-2xl">
+              {features.map((feat, idx) => (
+                <div key={feat.id} className="flex border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition-colors">
+                  <div className="w-12 bg-white/5 flex items-center justify-center text-xs text-muted-foreground font-mono border-r border-white/5 select-none">{idx + 1}</div>
+                  <div className="flex-1 flex items-center px-4">
+                    <input
+                      value={feat.text}
+                      onChange={(e) => handleFeatureChange(feat.id, e.target.value)}
+                      placeholder={idx === 0 ? "e.g. Launch Beta Version" : "Add another milestone..."}
+                      className="flex-1 bg-transparent py-4 text-sm text-foreground focus:outline-none placeholder:text-muted-foreground font-medium"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') addFeature("");
+                      }}
+                    />
+                    {features.length > 1 && (
+                      <button onClick={() => setFeatures(features.filter(f => f.id !== feat.id))} className="text-muted-foreground hover:text-red-500 px-3 opacity-50 hover:opacity-100"><X className="w-4 h-4" /></button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {features.length < 5 && (
+                <button onClick={() => addFeature("")} className="w-full py-3 bg-white/5 hover:bg-white/10 text-xs text-cyan-400 font-bold uppercase tracking-wider transition-colors border-t border-white/5">
+                  + Add Milestone
+                </button>
+              )}
+            </div>
+
+            {/* Suggestions for Milestones */}
+            <div className="space-y-2">
+              <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest pl-1">Suggested Milestones</div>
+              <div className="flex flex-wrap gap-2">
+                {MILESTONE_SUGGESTIONS.map((sugg, i) => (
+                  <button
+                    key={i}
+                    onClick={() => addFeature(sugg)}
+                    className="text-[10px] px-3 py-1.5 rounded-full glass-button text-muted-foreground transition-all cursor-pointer"
+                  >
+                    + {sugg}
                   </button>
                 ))}
               </div>
             </div>
+
           </div>
-        </section>
+        );
 
-      </main>
+      default: return null;
+    }
+  };
 
-      {/* FLOATING CTA (HUD Style) */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950/80 backdrop-blur-xl border-t border-white/10">
-        <div className="container mx-auto px-6 py-4 max-w-4xl">
-          <div className="flex items-center justify-between">
-            <div className="hidden md:block">
-              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Blueprint Status</div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  {[
-                    lifeStage,
-                    selectedAreas.length > 0,
-                    Object.keys(answers).length >= 3,
-                    goals.filter(g => g.text.trim()).length >= 1
-                  ].map((completed, idx) => (
-                    <div key={idx} className={`h-1.5 rounded-full transition-all duration-500 ${completed ? 'bg-indigo-500 w-8 shadow-[0_0_8px_rgba(99,102,241,0.5)]' : 'bg-slate-800 w-8'
-                      }`} />
-                  ))}
-                </div>
-              </div>
-            </div>
+  const isStepValid = () => {
+    if (step === 1) return operatorClass !== "";
+    if (step === 2) return dependencies.length >= 1;
+    if (step === 3) return envVars['big_goal'] && envVars['monthly_income'];
+    if (step === 4) return envVars['good_habit'];
+    if (step === 5) return features.some(f => f.text.trim() !== ""); // At least one goal
+    return false;
+  };
 
-            <button
-              onClick={handleSubmit}
-              disabled={!isValid || isSubmitting}
-              className={`group flex items-center justify-center gap-3 px-8 h-12 rounded-full text-base font-bold transition-all w-full md:w-auto ${isValid && !isSubmitting
-                  ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:shadow-lg hover:shadow-indigo-500/25 hover:scale-105"
-                  : "bg-slate-800 text-slate-500 cursor-not-allowed"
-                }`}
-            >
-              {isSubmitting ? (
-                <>
-                  <Sparkles className="w-5 h-5 animate-spin" />
-                  <span>Processing...</span>
-                </>
-              ) : (
-                <>
-                  <span>Generate Blueprint</span>
-                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                </>
-              )}
-            </button>
-          </div>
-        </div>
+  // --- UI RENDER ---
+  return (
+    <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4 font-sans selection:bg-indigo-500/30 relative overflow-hidden transition-colors duration-500">
+
+      {/* Background Ambience */}
+      <div className="fixed inset-0 grid-lines opacity-[0.03] pointer-events-none" />
+      <div className="fixed top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
+
+      {/* Theme Toggle */}
+      <div className="fixed top-4 right-4 z-50">
+        <ThemeToggle />
       </div>
 
+      <div className="w-full max-w-3xl relative">
+
+        {/* WINDOW FRAME */}
+        <div className="glass-card rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/5 backdrop-blur-3xl">
+
+          {/* TITLE BAR */}
+          <div className="h-12 bg-white/5 border-b border-white/5 flex items-center px-5 justify-between select-none">
+            <div className="flex gap-2">
+              <div className="w-3 h-3 rounded-full bg-red-500/20 border border-red-500/50" />
+              <div className="w-3 h-3 rounded-full bg-yellow-500/20 border border-yellow-500/50" />
+              <div className="w-3 h-3 rounded-full bg-emerald-500/20 border border-emerald-500/50" />
+            </div>
+            <div className="text-[10px] font-mono text-muted-foreground flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full border border-white/5">
+              <Sparkles className="w-3 h-3 text-cyan-400" />
+              <span className="tracking-wide">VISION_OS // SETUP</span>
+            </div>
+            <div className="w-10" />
+          </div>
+
+          {/* MAIN CONTENT AREA */}
+          <div className="p-8 md:p-10 min-h-[550px] flex flex-col relative">
+
+            {/* Initial Boot Logs */}
+            <div className="space-y-1 mb-8 text-xs font-mono text-muted-foreground">
+              {logs.map((log, i) => (
+                <div key={i} className="opacity-70 animate-in fade-in duration-200">{log}</div>
+              ))}
+              <div ref={bottomRef} />
+            </div>
+
+            {/* Wizard Step Content */}
+            {!bootSequence && step > 0 && (
+              <div className="flex-1 flex flex-col">
+
+                {/* Dynamic Content */}
+                <div className="flex-1 relative animate-in zoom-in-95 duration-500">
+                  {renderContent()}
+                </div>
+
+                {/* Navigation Footer */}
+                <div className="mt-12 pt-6 border-t border-white/5 flex items-center justify-between">
+                  <div className="text-xs text-muted-foreground font-medium">
+                    SETUP PROGRESS: {Math.round((step / 5) * 100)}%
+                  </div>
+
+                  {step < 5 ? (
+                    <button
+                      onClick={handleNext}
+                      disabled={!isStepValid()}
+                      className="flex items-center gap-2 bg-cyan-500 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-xl text-xs font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed transition-all hover:scale-105 active:scale-95 shadow-lg shadow-cyan-500/20"
+                    >
+                      Next Step <ChevronRight className="w-3 h-3" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleDeploy}
+                      disabled={!isStepValid() || isDeploying}
+                      className="flex items-center gap-2 bg-cyan-500 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl text-xs font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed transition-all hover:scale-105 active:scale-95 shadow-lg shadow-emerald-500/20"
+                    >
+                      {isDeploying ? <Loader2 className="w-3 h-3 animate-spin" /> : <Rocket className="w-3 h-3" />}
+                      {isDeploying ? "INITIALIZING..." : "LAUNCH VISION"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+          </div>
+
+        </div>
+      </div>
     </div>
   );
 };

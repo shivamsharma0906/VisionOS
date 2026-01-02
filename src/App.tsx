@@ -15,8 +15,11 @@ import WeeklyCheckin from "./pages/WeeklyCheckin";
 import NotFound from "./pages/NotFound";
 import AICoach from "./pages/AICoach";
 import WeeklyAIReview from "./pages/WeeklyAIReview";
+import Calendar from "./pages/Calendar";
 
 const queryClient = new QueryClient();
+
+import DashboardLayout from "@/components/layout/DashboardLayout";
 
 const App = () => {
   // 1. Check if we are in development mode (localhost)
@@ -29,7 +32,7 @@ const App = () => {
         <VisionProvider>
           <Toaster />
           <Sonner />
-          
+
           {/* 2. Conditionally set the basename */}
           {/* Localhost uses '/' */}
           {/* GitHub Pages uses '/VisionOS' */}
@@ -41,14 +44,15 @@ const App = () => {
               {/* User Journey */}
               <Route path="/wizard/*" element={<Wizard />} />
               <Route path="/summary" element={<VisionSummary />} />
-              <Route path="/vision-board" element={<VisionBoard />} />
 
-              {/* Weekly */}
-              <Route path="/weekly-checkin" element={<WeeklyCheckin />} />
-              <Route path="/weekly-ai-review" element={<WeeklyAIReview />} />
-
-              {/* AI Coach (on-demand) */}
-              <Route path="/ai-coach" element={<AICoach />} />
+              {/* Authenticated Dashboard Routes */}
+              <Route element={<DashboardLayout />}>
+                <Route path="/vision-board" element={<VisionBoard />} />
+                <Route path="/weekly-checkin" element={<WeeklyCheckin />} />
+                <Route path="/weekly-ai-review" element={<WeeklyAIReview />} />
+                <Route path="/ai-coach" element={<AICoach />} />
+                <Route path="/calendar" element={<Calendar />} />
+              </Route>
 
               {/* Fallback */}
               <Route path="*" element={<NotFound />} />

@@ -2,8 +2,8 @@
 import { VisionData } from '../types/vision';
 
 // 👇 THIS IS THE FIX
-// It checks your .env files first. If found, it uses that. If not, it falls back to localhost.
-const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+// It checks your .env files first. If found, it uses that. If not, it falls back to the Render Link.
+const BACKEND_URL = import.meta.env.VITE_API_URL || "https://visionos-backend.onrender.com";
 const API_BASE = `${BACKEND_URL}/api`;
 
 // Helper to get the token from storage
@@ -48,7 +48,7 @@ export const fetchVisionFromBackend = async () => {
 
     if (!response.ok) {
       // If 404, it just means new user has no data yet
-      if (response.status === 404) return null; 
+      if (response.status === 404) return null;
       const errorData = await response.json();
       throw new Error(errorData.message || "Failed to fetch vision");
     }
@@ -96,6 +96,33 @@ export const loginUser = async (credentials: { email: string; password: string }
     return await response.json();
   } catch (error) {
     console.error("Login Error:", error);
+    throw error;
+    throw error;
+  }
+};
+
+export const deleteUserAccount = async (email: string) => {
+  try {
+    const response = await fetch(`${API_BASE}/auth/delete/${email}`, {
+      method: "DELETE", // Or GET if using the specific route defined
+    });
+    if (!response.ok) throw new Error("Delete user failed");
+    return await response.json();
+  } catch (error) {
+    console.error("Delete User Error:", error);
+    throw error;
+  }
+};
+
+export const deleteVisionData = async (userId: string) => {
+  try {
+    const response = await fetch(`${API_BASE}/vision/${userId}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) throw new Error("Delete vision data failed");
+    return await response.json();
+  } catch (error) {
+    console.error("Delete Vision Error:", error);
     throw error;
   }
 };

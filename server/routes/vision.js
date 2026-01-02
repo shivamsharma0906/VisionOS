@@ -32,4 +32,15 @@ router.get("/:userId", async (req, res) => {
   }
 });
 
+// DELETE vision
+router.delete("/:userId", async (req, res) => {
+  try {
+    await Vision.deleteMany({ userId: req.params.userId });
+    res.json({ message: "Vision data deleted successfully" });
+  } catch (err) {
+    console.error("❌ Delete error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
